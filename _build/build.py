@@ -10,14 +10,16 @@ looks the same on every machine and leans on no third-party service.
     python _build/build.py                  # everything
     python _build/build.py contributions    # only the contribution heatmap (the daily refresh)
 
-Art comes from the KindaMAD Studios site: the local checkout when it exists,
-kindamad.pages.dev otherwise. Fonts download once into _build/fonts.
+Art comes from the KindaMAD Studios site. For a full build, point KINDAMAD_SITE at a local
+checkout of it; without one the script tries kindamad.pages.dev, whose CDN may throttle it.
+The contributions refresh needs neither. Fonts download once into _build/fonts.
 """
 
 import base64
 import html
 import io
 import itertools
+import json
 import math
 import os
 import re
@@ -36,8 +38,11 @@ ROOT = os.path.dirname(HERE)
 ASSETS = os.path.join(ROOT, "assets")
 FONT_DIR = os.path.join(HERE, "fonts")
 ICON_DIR = os.path.join(HERE, "icons")
-SITE_LOCAL = r"C:\UnityProjects\MoneyIsBalls\kindamadballs-site\public"
 SITE_URL = "https://kindamad.pages.dev"
+# Optional: a local checkout of the studio site, to build offline and to pick up a redrawn app
+# icon. Without it, art comes from the live site and the icon from _build/game-icon.json.
+SITE_CHECKOUT = os.environ.get("KINDAMAD_SITE", "")
+GAME_ICON_JSON = os.path.join(HERE, "game-icon.json")
 
 # Palette lifted from the site's globals.css ("pulp comic", dark).
 BG, PANEL, INK, DIM = "#0c0908", "#120d0b", "#f4ead2", "#9a8f78"
@@ -209,11 +214,17 @@ def head(defs, font, s, size, x, y, face=INK):
 
 
 def site_image(rel):
-    local = os.path.join(SITE_LOCAL, *rel.split("/"))
-    if os.path.exists(local):
+    local = os.path.join(SITE_CHECKOUT, "public", *rel.split("/"))
+    if SITE_CHECKOUT and os.path.exists(local):
         return Image.open(local).convert("RGBA")
-    with urllib.request.urlopen(f"{SITE_URL}/{rel}") as res:
-        return Image.open(io.BytesIO(res.read())).convert("RGBA")
+    # The site's CDN turns away Python's default user agent, and it can still throttle a full
+    # build's worth of requests. A local checkout (KINDAMAD_SITE) is the dependable way.
+    req = urllib.request.Request(f"{SITE_URL}/{rel}", headers={"User-Agent": "Mozilla/5.0 (kindamad-profile-build)"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as res:
+            return Image.open(io.BytesIO(res.read())).convert("RGBA")
+    except OSError as err:
+        sys.exit(f"could not fetch {SITE_URL}/{rel} ({err}). Set KINDAMAD_SITE to a local checkout of the site and rerun.")
 
 
 def cover(im, w, h, box=None, focus=(0.5, 0.5)):
@@ -278,6 +289,63 @@ def bang(x, y, size, cls="wobble"):
         f'<polygon points="{BURST}" fill="{GOLD}" stroke="{OUTLINE}" stroke-width="2"/>'
         f'<g fill="{RED}" stroke="{OUTLINE}" stroke-width="1.6" stroke-linejoin="round">'
         '<path d="M45 31 55 31 52.5 58 47.5 58Z"/><circle cx="50" cy="65.5" r="4.6"/></g></g></g>'
+    )
+
+
+def load_game_icon():
+    """The app icon vector. The site's generated game-icon.ts is the source of truth; a copy lives in
+    _build/game-icon.json so the profile builds anywhere, refreshed whenever the site checkout is at hand."""
+    source = os.path.join(SITE_CHECKOUT, "src", "data", "game-icon.ts")
+    if SITE_CHECKOUT and os.path.exists(source):
+        with open(source, encoding="utf-8") as f:
+            icon = json.loads(re.search(r"GAME_ICON\s*=\s*(\{.*\})\s*as const", f.read(), re.S).group(1))
+        with open(GAME_ICON_JSON, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(icon, f, indent=2)
+            f.write("\n")
+        return icon
+    with open(GAME_ICON_JSON, encoding="utf-8") as f:
+        return json.load(f)
+
+
+# GameIcon.astro's idle loop from the site's globals.css: one 3.2s clock, transforms only.
+GAME_ICON_CSS = (
+    ".gi-burst,.gi-ball,.gi-vein{transform-box:fill-box;transform-origin:center}"
+    ".gi-burst{animation:gi-breathe 3.2s ease-in-out infinite}"
+    ".gi-ball{animation:gi-twitch 3.2s linear infinite}"
+    ".gi-vein{animation:gi-throb 3.2s ease-out infinite}"
+    "@keyframes gi-breathe{0%,100%{transform:rotate(0deg) scale(1)}50%{transform:rotate(5deg) scale(1.05)}}"
+    "@keyframes gi-twitch{0%,74%,94%,100%{transform:translate(0,0) rotate(0deg)}78%{transform:translate(-14px,4px) rotate(-3deg)}"
+    "82%{transform:translate(12px,-4px) rotate(3deg)}86%{transform:translate(-9px,3px) rotate(-2deg)}"
+    "90%{transform:translate(6px,-2px) rotate(1deg)}}"
+    "@keyframes gi-throb{0%,72%,100%{transform:scale(1)}80%{transform:scale(1.22)}88%{transform:scale(.96)}}"
+)
+
+
+def game_icon(defs, x, y, size):
+    """The KindaMADballs app icon, from the vector the site's build_icon.py generates (same as the Play icon)."""
+    icon = load_game_icon()
+    ground, ball, burst, vein = icon["ground"], icon["ball"], icon["burst"], icon["vein"]
+    sx, sy, sr = ball["shadow"]
+    defs += [
+        f'<radialGradient id="gi-ground" cx="50%" cy="42%" r="72%"><stop offset="0" stop-color="{ground[0]}"/>'
+        f'<stop offset=".58" stop-color="{ground[1]}"/><stop offset="1" stop-color="{ground[2]}"/></radialGradient>',
+        # Play crops the listing icon to 30% corners, so this is the tile the store shows.
+        '<clipPath id="gi-tile"><rect width="512" height="512" rx="153.6"/></clipPath>',
+    ]
+    veins = "".join(f'<path d="{d}"/>' for d in vein["paths"])
+    return (
+        f'<g transform="translate({num(x)} {num(y)}) scale({size / 512:.5f})">'
+        '<rect x="18" y="24" width="512" height="512" rx="153.6" fill="#000" fill-opacity=".85"/>'
+        '<g clip-path="url(#gi-tile)"><rect width="512" height="512" fill="url(#gi-ground)"/>'
+        f'<g class="gi-burst"><g transform="{burst["transform"]}">'
+        f'<polygon points="{burst["points"]}" transform="translate(2 2.5)" fill="{icon["extrude"]}"/>'
+        f'<polygon points="{burst["points"]}" fill="{burst["fill"]}" stroke="{icon["outline"]}" stroke-width="2.2" stroke-linejoin="round"/></g></g>'
+        f'<g class="gi-ball"><circle cx="{sx}" cy="{sy}" r="{sr}" fill="{icon["extrude"]}"/>'
+        f'<circle cx="{ball["cx"]}" cy="{ball["cy"]}" r="{ball["rim"]}" fill="{icon["outline"]}"/>'
+        f'<circle cx="{ball["cx"]}" cy="{ball["cy"]}" r="{ball["r"]}" fill="{ball["fill"]}"/>'
+        f'<g class="gi-vein"><g transform="{vein["transform"]}" fill="{vein["fill"]}" stroke="{icon["outline"]}" '
+        f'stroke-width="{vein["strokeWidth"]}" stroke-linejoin="round" paint-order="stroke fill">{veins}</g></g></g>'
+        "</g></g>"
     )
 
 
@@ -379,11 +447,11 @@ COMMON_DEFS = (
 HALFTONE = '<rect width="100%" height="100%" fill="url(#halftone)"/>'
 
 
-def svg(w, h, label, body, defs):
+def svg(w, h, label, body, defs, css=""):
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}" '
         f'role="img" aria-label="{esc(label)}"><title>{esc(label)}</title>'
-        f"<style>{BASE_CSS}</style><defs>{COMMON_DEFS}{''.join(defs)}</defs>{''.join(body)}</svg>"
+        f"<style>{BASE_CSS}{css}</style><defs>{COMMON_DEFS}{''.join(defs)}</defs>{''.join(body)}</svg>"
     )
 
 
@@ -870,7 +938,6 @@ def status_board():
         '<filter id="limeglow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="5" result="b"/>'
         '<feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>'
     )
-    fireball = data_uri(site_image("renders/FIREBALL.png").resize((200, 200), Image.LANCZOS), fmt="WEBP", quality=90)
     hammer = site_image("renders/BONKER.png").resize((170, 170), Image.LANCZOS)
     hammer_face = data_uri(tint(hammer, GOLD), fmt="WEBP", quality=90)
     hammer_drop = data_uri(tint(hammer, DRED), fmt="WEBP", quality=90)
@@ -899,18 +966,18 @@ def status_board():
                 f'<circle cx="{num(mx)}" cy="{my}" r="4" fill="{LIME}"/></g>'
             )
         else:
+            glow = TEAL if kicker == "SHIPPING" else accent
             defs.append(
                 f'<radialGradient id="halo{i}" cx="{num(mx)}" cy="{my}" r="{mr + 22}" gradientUnits="userSpaceOnUse">'
-                f'<stop offset=".45" stop-color="{accent}" stop-opacity=".45"/><stop offset="1" stop-color="{accent}" stop-opacity="0"/></radialGradient>'
+                f'<stop offset=".45" stop-color="{glow}" stop-opacity=".45"/><stop offset="1" stop-color="{glow}" stop-opacity="0"/></radialGradient>'
             )
-            body.append(
-                f'<circle class="glow" cx="{num(mx)}" cy="{my}" r="{mr + 22}" fill="url(#halo{i})"/>'
-                f'<circle cx="{num(mx)}" cy="{my}" r="{mr}" fill="#000" fill-opacity=".45" stroke="{accent}" stroke-opacity=".5" stroke-width="2"/>'
-            )
+            body.append(f'<circle class="glow" cx="{num(mx)}" cy="{my}" r="{mr + 22}" fill="url(#halo{i})"/>')
             if kicker == "SHIPPING":
-                body.append(f'<image href="{fireball}" x="{num(mx - 50)}" y="{my - 56}" width="100" height="100"/>')
+                # The new KindaMADballs app icon, the tile the Play listing and the site show.
+                body.append(game_icon(defs, mx - 44, my - 46, 88))
             else:
                 body.append(
+                    f'<circle cx="{num(mx)}" cy="{my}" r="{mr}" fill="#000" fill-opacity=".45" stroke="{accent}" stroke-opacity=".5" stroke-width="2"/>'
                     f'<g class="wobble"><image href="{hammer_drop}" x="{num(mx - 37)}" y="{my - 36}" width="80" height="80"/>'
                     f'<image href="{hammer_face}" x="{num(mx - 40)}" y="{my - 40}" width="80" height="80"/></g>'
                 )
@@ -930,7 +997,7 @@ def status_board():
         body += [text(OSWALD_R, line, 20, tx, top + 190 + j * 27, INK, opacity=0.82) for j, line in enumerate(lines)]
     body.append(front)
     label = "Right now. " + " ".join(f"{k.title()}: {t.title()}. {c}" for k, _, t, c in rows)
-    write("now.svg", svg(W, H, label, body, defs))
+    write("now.svg", svg(W, H, label, body, defs, css=GAME_ICON_CSS))
 
 
 # ── Building in public ──────────────────────────────────────────────────────
