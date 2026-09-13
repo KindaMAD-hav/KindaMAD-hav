@@ -8,9 +8,9 @@
   <a href="mailto:kindamad.hav@gmail.com"><img src="assets/btn-email.svg" height="44" alt="kindamad.hav@gmail.com"></a>
   <br>
   <a href="https://www.youtube.com/@KindaMADballs"><img src="assets/btn-youtube.svg" height="40" alt="YouTube"></a>
-  <a href="https://www.instagram.com/kinda_mad.balls/"><img src="assets/btn-instagram.svg" height="40" alt="Instagram"></a>
+  <a href="https://www.instagram.com/kinda_mad.hav/"><img src="assets/btn-instagram.svg" height="40" alt="Instagram"></a>
   <a href="https://discord.gg/tkaub8twjb"><img src="assets/btn-discord.svg" height="40" alt="Discord"></a>
-  <a href="https://x.com/KindaMADballs"><img src="assets/btn-x.svg" height="40" alt="X"></a>
+  <a href="https://x.com/KindaMAD_hav"><img src="assets/btn-x.svg" height="40" alt="X"></a>
   <a href="https://kindamad.itch.io/"><img src="assets/btn-itch.svg" height="40" alt="itch.io"></a>
   <a href="https://www.linkedin.com/in/madhav-gangneja-9aa265312/"><img src="assets/btn-linkedin.svg" height="40" alt="LinkedIn"></a>
 </p>
