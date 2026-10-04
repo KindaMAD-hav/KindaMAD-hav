@@ -28,9 +28,9 @@ I make loud, hand-made games and build them in public, in front of an audience t
 
 <p align="center">
   <a href="https://kindamad.pages.dev/balls"><img src="assets/card-kindamadballs.svg" width="49%" alt="KindaMADballs. Survive endless swarms. Stack wild ball weapons. Climb the leaderboards. Free on Android."></a>
+  <a href="https://kindamad.pages.dev/ludo"><img src="assets/card-ludo.svg" width="49%" alt="Play Ludo. Ludo with a twist: classic Ludo where every capture is a 10-second duel. Coming soon on Google Play. Published by MMA Studios."></a>
   <a href="https://kindamad.pages.dev/radiation"><img src="assets/card-radiation.svg" width="49%" alt="Radiation Maxxing. Push past critical. An idle game where you are the radiation."></a>
   <a href="https://kindamad.pages.dev/rayban-tour"><img src="assets/card-rayban.svg" width="49%" alt="Ray-Ban Campus Tour, client work. A hands-free audio tour on Ray-Ban Meta smart glasses."></a>
-  <a href="https://www.youtube.com/@KindaMADballs"><img src="assets/card-title03.svg" width="49%" alt="Title No. 03. Still in the lab. Follow to find out."></a>
 </p>
 
 <img src="assets/head-jams.svg" width="100%" alt="Before the studio, the jams">

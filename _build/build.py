@@ -660,6 +660,41 @@ def card_balls():
     write("card-kindamadballs.svg", svg(CARD_W, CARD_H, "KindaMADballs: survivor roguelike, free playtest on Android", body, defs))
 
 
+def card_ludo():
+    """Play Ludo wears its own look inside the pulp frame, like the site's LudoCard: the
+    burst sky, the 3D board and the logo art. Copy comes from the site's src/data/ludo.ts."""
+    defs, body = [], []
+    back, front, divider = card_start(defs, PANEL)
+    board = site_image("ludo/board/cross-token-800.webp").convert("RGBA").resize((400, 320), Image.LANCZOS)
+    logo = site_image("ludo/logo/logo-cutout-480.webp").convert("RGBA").resize((300, 229), Image.LANCZOS)
+    defs.append(
+        '<radialGradient id="sky" cx="400" cy="150" r="520" gradientUnits="userSpaceOnUse">'
+        '<stop offset="0" stop-color="#19A9F2"/><stop offset=".46" stop-color="#0875E8"/>'
+        '<stop offset="1" stop-color="#073B91"/></radialGradient>'
+    )
+    body += [
+        back,
+        '<g clip-path="url(#art)">',
+        f'<rect width="{CARD_W}" height="{ART_H}" fill="url(#sky)"/>',
+        rays(400, 150, 700, "#fff", 0.12),
+        f'<g transform="rotate(-6 400 170)"><image href="{data_uri(board, fmt="WEBP", quality=88)}" '
+        'x="226" y="22" width="400" height="320"/></g>',
+        f'<g class="wobble slow"><image href="{data_uri(logo, fmt="WEBP", quality=90)}" x="8" y="60" width="300" height="229"/></g>',
+        label_box(24, 24, "COMING SOON · GOOGLE PLAY", ARCHIVO, 13, "#fff", "#073B91", INK, dot="#FFC61B"),
+        "</g>",
+        divider,
+    ]
+    body += pulp_copy(
+        defs,
+        "TITLE NO. 02 · LUDO WITH A TWIST",
+        "PLAY LUDO",
+        "Classic Ludo where every capture is a 10-second duel. Online, or on one phone. Published by MMA Studios.",
+        "SEE THE GAME →",
+    )
+    body.append(front)
+    write("card-ludo.svg", svg(CARD_W, CARD_H, "Play Ludo: Ludo with a twist, coming soon on Google Play", body, defs))
+
+
 def card_radiation():
     defs, body = [], []
     back, front, divider = card_start(defs, RAD_BG)
@@ -694,7 +729,7 @@ def card_radiation():
     lines = MONO.wrap(copy, 16, maxw)
     assert len(lines) <= 3, lines
     body += [
-        text(MONO, "TITLE NO. 02 · IDLE GAME", 14, x, 360, LIME, tracking=0.2, opacity=0.75),
+        text(MONO, "TITLE NO. 03 · IDLE GAME", 14, x, 360, LIME, tracking=0.2, opacity=0.75),
         f'<path d="{title_d}" fill="{LIME}" fill-opacity=".45" filter="url(#soft)"/><path d="{title_d}" fill="{PALE}"/>',
         text(MONO_B, "PUSH PAST CRITICAL", 15, x, 440, LIME, tracking=0.2),
         *[text(MONO, line, 16, x, 482 + i * 26, PALE, opacity=0.75) for i, line in enumerate(lines)],
@@ -741,32 +776,6 @@ def card_rayban():
     )
     body.append(front)
     write("card-rayban.svg", svg(CARD_W, CARD_H, "Ray-Ban Campus Tour: a hands-free audio tour on Ray-Ban Meta smart glasses", body, defs))
-
-
-def card_title03():
-    defs, body = [], []
-    back, front, divider = card_start(defs, PANEL)
-    q = 210
-    body += [
-        back,
-        '<g clip-path="url(#art)">',
-        radial(defs, "ember", 300, 160, 420, EMBER, 0.26, cls="glow"),
-        rays(300, 160, 700, GOLD, 0.05),
-        HALFTONE,
-        f'<g class="wobble slow">{mast(defs, ALFA, "?", q, 300, 160 + ALFA.cap * q / 2, anchor="middle")}</g>',
-        label_box(24, 24, "COMING SOON", ARCHIVO, 13, DIM, BG, INK, stroke_opacity=0.5, shadow=False),
-        "</g>",
-        divider,
-    ]
-    body += pulp_copy(
-        defs,
-        "STILL IN THE LAB",
-        "TITLE NO. 03",
-        "More are in the lab. The next one gets built in public, devlog by devlog, rough edges and all.",
-        "FOLLOW TO FIND OUT →",
-    )
-    body.append(front)
-    write("card-title03.svg", svg(CARD_W, CARD_H, "Title No. 03: still in the lab. Follow to find out.", body, defs))
 
 
 # ── Jam cards ───────────────────────────────────────────────────────────────
@@ -1122,9 +1131,9 @@ def main(args):
     section("jams", "BEFORE THE STUDIO, THE JAMS", "2025 · TWO 1STS · TWO 2NDS", "Before the studio, the jams")
     section("toolbox", "THE TOOLBOX", "ENGINES · CODE · CRAFT", "The toolbox")
     card_balls()
+    card_ludo()
     card_radiation()
     card_rayban()
-    card_title03()
     jams()
     toolbox()
     footer()
