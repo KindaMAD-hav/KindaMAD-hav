@@ -48,6 +48,7 @@ GAME_ICON_JSON = os.path.join(HERE, "game-icon.json")
 BG, PANEL, INK, DIM = "#0c0908", "#120d0b", "#f4ead2", "#9a8f78"
 GOLD, EMBER, RED, DRED, OUTLINE = "#ffce45", "#ff6a1f", "#e5352b", "#a81d16", "#1a1206"
 TEAL = "#27c2b0"
+LUDO_SKY = "#19A9F2"
 # Radiation Maxxing keeps its own hazard identity, same as on the site.
 RAD_BG, LIME, PALE, HAZARD = "#080a04", "#c6ff2e", "#dfe7c8", "#ffd400"
 
@@ -943,18 +944,15 @@ def status_board():
     H = top + col_h + 30 + 8
     defs, body = [], []
     back, front = panel(defs, W, H, sw=3)
-    defs.append(
-        '<filter id="limeglow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="5" result="b"/>'
-        '<feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>'
-    )
+    die = data_uri(site_image("ludo/el/dice-6.webp").convert("RGBA").resize((128, 128), Image.LANCZOS), fmt="WEBP", quality=90)
     hammer = site_image("renders/BONKER.png").resize((170, 170), Image.LANCZOS)
     hammer_face = data_uri(tint(hammer, GOLD), fmt="WEBP", quality=90)
     hammer_drop = data_uri(tint(hammer, DRED), fmt="WEBP", quality=90)
     rows = [
         ("SHIPPING", EMBER, "KINDAMADBALLS",
          "A survivor roguelike. The free playtest is open on Android."),
-        ("BUILDING", LIME, "RADIATION MAXXING",
-         "An idle game where you are the radiation. In development for Steam."),
+        ("BUILDING", LUDO_SKY, "PLAY LUDO",
+         "Ludo where every capture is a 10-second duel. Coming soon on Google Play."),
         ("TINKERING", GOLD, "THE WORKSHOP",
          "Custom 2D physics, Unity editor tooling, and MCP pipelines for Unity, Unreal, Blender and FL Studio."),
     ]
@@ -968,11 +966,15 @@ def status_board():
             f'<rect x="{num(x)}" y="{top + 18}" width="4" height="{col_h - 36}" fill="{accent}"/>',
         ]
         if kicker == "BUILDING":
+            # Play Ludo's die on the game's burst sky.
+            defs.append(
+                f'<radialGradient id="ludosky" cx="{num(mx)}" cy="{my}" r="{mr}" gradientUnits="userSpaceOnUse">'
+                '<stop offset="0" stop-color="#19A9F2"/><stop offset=".6" stop-color="#0875E8"/><stop offset="1" stop-color="#073B91"/></radialGradient>'
+            )
             body.append(
-                f'<circle cx="{num(mx)}" cy="{my}" r="{mr}" fill="{RAD_BG}" stroke="{LIME}" stroke-opacity=".55" stroke-width="3"/>'
-                f'<g filter="url(#limeglow)"><g class="spin s24"><circle cx="{num(mx)}" cy="{my}" r="27" fill="none"/>'
-                f'<path d="{trefoil(mx, my, 27)}" fill="{LIME}"/></g>'
-                f'<circle cx="{num(mx)}" cy="{my}" r="4" fill="{LIME}"/></g>'
+                f'<circle class="glow" cx="{num(mx)}" cy="{my}" r="{mr + 14}" fill="{LUDO_SKY}" fill-opacity=".18"/>'
+                f'<circle cx="{num(mx)}" cy="{my}" r="{mr}" fill="url(#ludosky)" stroke="#fff" stroke-opacity=".6" stroke-width="3"/>'
+                f'<g class="wobble"><image href="{die}" x="{num(mx - 30)}" y="{my - 32}" width="60" height="60"/></g>'
             )
         else:
             glow = TEAL if kicker == "SHIPPING" else accent
@@ -996,11 +998,7 @@ def status_board():
             text(MONO_B, kicker, 14, x + 140, my + MONO_B.cap * 14 / 2, accent, tracking=0.22),
         ]
         tx, ty, maxw = x + 24, top + 150, colw - 48
-        if kicker == "BUILDING":
-            d = MONO_B.path(title, MONO_B.fit(title, maxw, 30), tx, ty)
-            body.append(f'<path d="{d}" fill="{LIME}" fill-opacity=".45" filter="url(#soft)"/><path d="{d}" fill="{PALE}"/>')
-        else:
-            body.append(mast(defs, ALFA, title, ALFA.fit(title, maxw, 34), tx, ty))
+        body.append(mast(defs, ALFA, title, ALFA.fit(title, maxw, 34), tx, ty))
         lines = OSWALD_R.wrap(copy, 20, maxw)
         assert len(lines) <= 3, lines
         body += [text(OSWALD_R, line, 20, tx, top + 190 + j * 27, INK, opacity=0.82) for j, line in enumerate(lines)]

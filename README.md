@@ -20,7 +20,7 @@ I'm Madhav, a content creator turned game developer from India and the one-perso
 I make loud, hand-made games and build them in public, in front of an audience that ran up over 200 million views in the last year.
 </p>
 
-<img src="assets/now.svg" width="100%" alt="Right now. Shipping: KindaMADballs, a survivor roguelike with a free playtest open on Android. Building: Radiation Maxxing, an idle game where you are the radiation, in development for Steam. Tinkering: custom 2D physics, Unity editor tooling, and MCP pipelines for Unity, Unreal, Blender and FL Studio.">
+<img src="assets/now.svg" width="100%" alt="Right now. Shipping: KindaMADballs, a survivor roguelike with a free playtest open on Android. Building: Play Ludo, Ludo where every capture is a 10-second duel, coming soon on Google Play. Tinkering: custom 2D physics, Unity editor tooling, and MCP pipelines for Unity, Unreal, Blender and FL Studio.">
 
 <img src="assets/stats.svg" width="100%" alt="200M+ views in the last year. 4 jam podiums, two of them 1st place. 40+ weapons designed across KindaMADballs modes. Studio founded 2026.">
 
