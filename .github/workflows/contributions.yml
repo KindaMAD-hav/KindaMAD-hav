@@ -1,0 +1,43 @@
+# Daily refresh of assets/contributions.svg (the "Building in public" heatmap).
+# Commits only when the data changed: the build is byte-identical otherwise.
+name: Refresh contribution heatmap
+
+on:
+  schedule:
+    - cron: "30 0 * * *"   # 06:00 IST
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/contributions.yml
+      - _build/build.py
+
+permissions:
+  contents: write
+
+concurrency:
+  group: contributions
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q fonttools pillow
+      - name: Rebuild the heatmap
+        run: python _build/build.py contributions
+      - name: Commit if it changed
+        run: |
+          if git diff --quiet -- assets/contributions.svg; then
+            echo "No change."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/contributions.svg
+          git commit -m "Refresh contribution heatmap ($(date -u +%F))"
+          git push
