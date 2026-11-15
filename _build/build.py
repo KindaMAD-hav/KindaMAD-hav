@@ -579,7 +579,7 @@ def hero():
     back, front = field(defs, W, H, "teal", cut=(0, 0, 20, 0), at=(0.25, 0.5), dot=18)
     px, py, ps = 288, 292, 340
     face = data_uri(cover(site_image("madhav.jpg"), 680, 680), quality=86)
-    founder, fw = tag(0, 0, "Founder, KindaMAD Studios", 17, GOLD, INK)
+    founder, fw = tag(0, 0, "Founder, KindaMAD Studios", 19, GOLD, INK)
     body += [
         back,
         frame(defs, px - ps / 2, py - ps / 2, ps, ps, -3, face, sw=6, drop=(13, 15), fill="#1d1210"),
@@ -669,7 +669,7 @@ def now():
         else:
             marker = (f'<g class="wob"><image href="{hammer_red}" x="{num(mx + 4)}" y="{num(my + 5)}" width="{ms}" height="{ms}"/>'
                       f'<image href="{hammer_ink}" x="{num(mx)}" y="{num(my)}" width="{ms}" height="{ms}"/></g>')
-        status_tag, _ = tag(x + 122, y + 46, status, 16, bg, fg, dot=dot)
+        status_tag, _ = tag(x + 122, y + 44, status, 19, bg, fg, dot=dot)
         tw = colw - 48
         lines = MED.wrap(copy, 19, tw)
         assert len(lines) <= 3, lines
@@ -736,16 +736,18 @@ def card(name, kind, cut, at, art, tags, title, blurb, facts, cta, label, rot=-1
     for t in tags:
         markup, tw = t(tx, 348)
         body.append(markup)
-        tx += tw + 12
+        tx += tw + 10
+    assert tx - 10 - x <= maxw, f"tags run long: {name}"
     size = BLACK.fit(title, maxw, 56)
     body.append(letter(defs, title, size, x, 446))
     lines = MED.wrap(blurb, 19, maxw - 10)
     assert len(lines) <= 3, f"copy runs long: {lines}"
     body += [shout(defs, MED, line, 19, x, 486 + i * 26, off=(1, 2), shadow_opacity=0.45) for i, line in enumerate(lines)]
-    markup, _ = chips(x, 572, facts, 15)
+    markup, end = chips(x, 566, facts, 19)
+    assert end - x <= maxw, f"facts run long: {name}"
     body.append(markup)
     label_cta, bg, fg = cta
-    markup, _ = slab(x, 630, label_cta, 18, bg, fg)
+    markup, _ = slab(x, 630, label_cta, 19, bg, fg)
     body += [markup, front]
     write(f"card-{name}.svg", svg(CARD_W, CARD_H, label, body, defs))
 
@@ -805,24 +807,24 @@ def cards():
 
     card("survivors", "indigo", (0, 12, 0, 6), (0.85, 0.1),
          art_survivors,
-         [icon_tag, lambda x, y: tag(x, y, "Live on Google Play", 15, RED, CREAM, dot=True)],
+         [icon_tag, lambda x, y: tag(x, y, "Live on Google Play", 19, RED, CREAM, dot=True)],
          "BALL SURVIVORS",
          "Pick a ball, outlast the crowd, and every few seconds pick something that makes it worse for them.",
-         ["2 arenas", "a boss every 5 min", "free on Android"],
+         ["2 arenas", "a boss every 5 min", "free"],
          ("See the game →", GOLD, INK),
          "Ball Survivors: a survivor roguelike, live on Google Play")
     card("ludo", "blue", (10, 0, 8, 0), (0.7, 0.5),
          art_ludo,
-         [lambda x, y: tag(x, y, "Live on Google Play", 15, RED, CREAM, dot=True)],
+         [lambda x, y: tag(x, y, "Live on Google Play", 19, RED, CREAM, dot=True)],
          "PLAY LUDO",
          "Classic Ludo, except every capture is a 10-second duel. Eight mini-games, two boards, online or on one phone.",
-         ["8 duels", "2 boards", "published by MMA Studios"],
+         ["8 duels", "2 boards", "by MMA Studios"],
          ("See the game →", GOLD, INK),
          "Play Ludo: Ludo where every capture is a 10-second duel, live on Google Play", rot=1.5)
     card("hatchmash", "red", (0, 8, 0, 14), (0.3, 0.3),
          art_hatch,
-         [lambda x, y: tag(x, y, "RUN October Jam 2026", 15, INK, CREAM),
-          lambda x, y: tag(x, y, "Plays in browser", 15, GOLD, INK)],
+         [lambda x, y: tag(x, y, "RUN October Jam 2026", 19, INK, CREAM),
+          lambda x, y: tag(x, y, "Plays in browser", 19, GOLD, INK)],
          "HATCH & MASH",
          "Hatch a monster, slam a town, and watch it all fall down. Drag to stomp, let go to SLAM, and towers tip into towers.",
          ["180 monsters", "let go to slam", "free"],
@@ -830,7 +832,7 @@ def cards():
          "Hatch & Mash: hatch a monster, slam a town. A RUN October Jam 2026 game, free in your browser")
     card("rayban", "teal", (12, 0, 10, 0), (0.6, 0.35),
          art_rayban,
-         [lambda x, y: tag(x, y, "Client build · Shipped", 15, RED, CREAM)],
+         [lambda x, y: tag(x, y, "Client build · Shipped", 19, RED, CREAM)],
          "RAY-BAN CAMPUS TOUR",
          "A hands-free audio tour on Ray-Ban Meta smart glasses. Look at a room, hear its story. Beta SDK, no display, two weeks, delivered.",
          ["solo build", "2 weeks", "beta SDK"],
@@ -861,10 +863,12 @@ def jam_card(name, title, cover_rel, focus, place, award, extra, label, rot, cut
     body.append(shout(defs, XBOLD, award, 19, 42, 372, GOLD))
     yy = 404
     if extra:
-        for line in MED.wrap(extra, 16, maxw):
-            body.append(shout(defs, MED, line, 16, 42, yy, off=(1, 2), shadow_opacity=0.45))
-            yy += 23
-    markup, _ = slab(40, JAM_H - 104, "Play on itch.io →", 16, GOLD, INK)
+        lines = MED.wrap(extra, 19, maxw)
+        assert len(lines) <= 2, lines
+        for line in lines:
+            body.append(shout(defs, MED, line, 19, 42, yy, off=(1, 2), shadow_opacity=0.45))
+            yy += 27
+    markup, _ = slab(40, JAM_H - 104, "Play on itch.io →", 19, GOLD, INK)
     body += [markup, front]
     write(f"jam-{name}.svg", svg(JAM_W, JAM_H, label, body, defs))
 
@@ -888,7 +892,7 @@ GITHUB_USER = "KindaMAD-hav"
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 # GitHub's five contribution levels, in the greens the site's About page uses on cream.
 HEAT = ["#d8cfb4", "#6fb479", "#4f9b5e", "#3a8049", "#29612f"]
-LABEL = "#6b5a3a"
+LABEL = "#54452b"
 
 
 def fetch_contributions(user):
@@ -936,12 +940,14 @@ def contributions():
                       50, 136, 100, 700, W, note_fill=INK, note_shadow=False, top=INK, bot=INK2, line=GOLD, shadow=RED),
     ]
 
-    cx0, cy0, cw, ch = 50, 196, W - 120, 452
+    # GitHub shows this 1200-wide image at about 750px, so a size here comes out
+    # at ~0.62 of itself: nothing below 19 (about 12px on screen).
+    cx0, cy0, cw, ch = 50, 196, W - 120, 448
     clip = [
         f'<rect x="{cx0 + 10}" y="{cy0 + 12}" width="{cw}" height="{ch}" fill="{INK}"/>',
         f'<rect x="{cx0}" y="{cy0}" width="{cw}" height="{ch}" fill="{CREAM}" stroke="{INK}" stroke-width="4"/>',
-        text(XBOLD, "@KINDAMAD-HAV", 18, cx0 + 30, cy0 + 42, INK),
-        text(XBOLD, "LAST 12 MONTHS", 16, cx0 + cw - 30, cy0 + 42, INK, anchor="end"),
+        text(XBOLD, "@KINDAMAD-HAV", 22, cx0 + 30, cy0 + 46, INK),
+        text(XBOLD, "LAST 12 MONTHS", 20, cx0 + cw - 30, cy0 + 46, INK, anchor="end"),
     ]
     items = [
         (f"{total:,}", "CONTRIBUTIONS", "in the last year"),
@@ -953,16 +959,17 @@ def contributions():
     for i, (n, label, sub) in enumerate(items):
         cx = cx0 + col * (i + 0.5)
         clip += [
-            shout(defs, BLACK, n, 50, cx, cy0 + 112, INK, RED, off=(3, 4), anchor="middle"),
-            text(BOLD, label, 15, cx, cy0 + 142, INK, anchor="middle", tracking=0.06),
-            text(MED, sub, 14, cx, cy0 + 164, LABEL, anchor="middle"),
+            shout(defs, BLACK, n, 62, cx, cy0 + 122, INK, RED, off=(4, 5), anchor="middle"),
+            text(BOLD, label, 21, cx, cy0 + 156, INK, anchor="middle", tracking=0.05),
+            text(SEMI, sub, 20, cx, cy0 + 184, LABEL, anchor="middle"),
         ]
-    clip.append(f'<rect x="{cx0 + 30}" y="{cy0 + 190}" width="{cw - 60}" height="3" fill="{INK}" fill-opacity=".12"/>')
+    clip.append(f'<rect x="{cx0 + 30}" y="{cy0 + 204}" width="{cw - 60}" height="3" fill="{INK}" fill-opacity=".12"/>')
 
-    pitch, cell = 19, 15
+    pitch, cell, small = 18, 14, 20
+    days_w = max(SEMI.width(n, small) for n in ("Mon", "Wed", "Fri")) + 12
     ncols = max(d["col"] for d in days) + 1
-    x0 = cx0 + (cw - ncols * pitch) / 2 + 16
-    y0 = cy0 + 238
+    x0 = cx0 + (cw - (days_w + ncols * pitch - 4)) / 2 + days_w
+    y0 = cy0 + 250
     columns = {}
     for d in days:
         columns.setdefault(d["col"], []).append(d)
@@ -971,25 +978,25 @@ def contributions():
         month = int(min(d["date"] for d in columns[c])[5:7])
         x = x0 + c * pitch
         if month != prev and x - last_x >= pitch * 3:
-            clip.append(text(SEMI, MONTHS[month - 1], 15, x, y0 - 12, LABEL))
+            clip.append(text(SEMI, MONTHS[month - 1], small, x, y0 - 12, LABEL))
             last_x = x
         prev = month
     for row, name in ((1, "Mon"), (3, "Wed"), (5, "Fri")):
-        clip.append(text(SEMI, name, 14, x0 - 10, y0 + row * pitch + cell / 2 + SEMI.cap * 14 / 2, LABEL, anchor="end"))
+        clip.append(text(SEMI, name, small, x0 - 12, y0 + row * pitch + cell / 2 + SEMI.cap * small / 2, LABEL, anchor="end"))
     for d in days:
         ring = f' stroke="{INK}" stroke-width="2.5"' if d is best else ""
         clip.append(
             f'<rect x="{num(x0 + d["col"] * pitch)}" y="{num(y0 + d["row"] * pitch)}" width="{cell}" height="{cell}" '
             f'rx="2" fill="{HEAT[d["level"]]}"{ring}/>'
         )
-    ly = y0 + 7 * pitch + 34
-    clip.append(text(MED, f"Includes private work · data through {pretty(latest)}", 14, x0, ly, LABEL))
-    more_x = x0 + ncols * pitch - 4 - SEMI.width("More", 14)
-    clip.append(text(SEMI, "More", 14, more_x, ly, LABEL))
-    swatch_x = more_x - 10 - (len(HEAT) * 19 - 4)
+    ly = y0 + 7 * pitch + 38
+    clip.append(text(SEMI, f"Includes private work · data through {pretty(latest)}", small, x0, ly, LABEL))
+    more_x = x0 + ncols * pitch - 4 - SEMI.width("More", small)
+    clip.append(text(SEMI, "More", small, more_x, ly, LABEL))
+    swatch_x = more_x - 10 - (len(HEAT) * 20 - 4)
     for i, color in enumerate(HEAT):
-        clip.append(f'<rect x="{num(swatch_x + i * 19)}" y="{num(ly - 13)}" width="15" height="15" rx="2" fill="{color}"/>')
-    clip.append(text(SEMI, "Less", 14, swatch_x - 10, ly, LABEL, anchor="end"))
+        clip.append(f'<rect x="{num(swatch_x + i * 20)}" y="{num(ly - 15)}" width="16" height="16" rx="2" fill="{color}"/>')
+    clip.append(text(SEMI, "Less", small, swatch_x - 10, ly, LABEL, anchor="end"))
     # The strip of tape holding the clipping down.
     tape = (f'<g transform="rotate(-4 {num(cx0 + cw * 0.46 + 64)} {cy0})">'
             f'<rect x="{num(cx0 + cw * 0.46)}" y="{cy0 - 18}" width="128" height="34" fill="{CREAM}" fill-opacity=".82" '
@@ -1026,7 +1033,7 @@ def toolbox():
     body += [back, section_title(defs, "THE TOOLBOX", "Engines, code and craft. Only what I actually use.", pad, 138, 104, 700, W)]
     for i, (heading, tools) in enumerate(columns):
         x = pad + i * (colw + gap)
-        markup, _ = tag(x, 172, heading, 16, INK, GOLD)
+        markup, _ = tag(x, 168, heading, 19, INK, GOLD)
         body.append(markup)
         for j, (slug, label) in enumerate(tools):
             y = top + j * step
@@ -1038,11 +1045,11 @@ def toolbox():
                 f'{glyph(slug, x + 14, y + (chip_h - 22) / 2, 22, INK)}'
                 f'{text(SEMI, label, 19, x + 48, y + chip_h / 2 + SEMI.cap * 19 / 2, INK)}</g>'
             )
-    spec, sw_ = tag(pad, spec_y, "Specialties", 16, GOLD, INK)
+    spec, sw_ = tag(pad, spec_y, "Specialties", 19, GOLD, INK)
     body += [
         spec,
         shout(defs, XBOLD, "CUSTOM 2D PHYSICS · ECS/DOTS · UNITY EDITOR TOOLING · MCP AUTOMATION", 19,
-              pad + sw_ + 16, spec_y + 16 + XBOLD.cap * 19 / 2 + 1),
+              pad + sw_ + 16, spec_y + 19 + XBOLD.cap * 19 / 2 + 1),
         front,
     ]
     label = "The toolbox: " + ", ".join(name for _, tools in columns for _, name in tools)
@@ -1067,9 +1074,9 @@ def footer():
         f'<g class="spin"><image href="{data_uri(saw, fmt="WEBP", quality=88)}" x="30" y="236" width="200" height="207" filter="url(#popdrop)"/></g>',
         pop(data_uri(rpg, fmt="WEBP", quality=88), 980, 60, 180, 180 * rpg.height / rpg.width, delay="-1.4s"),
     ]
-    widths = [chip(0, 0, s, 16)[1] for s in services]
+    widths = [chip(0, 0, s, 19)[1] for s in services]
     total = sum(widths) + 14 * (len(widths) - 1)
-    markup, _ = chips((W - total) / 2, 56, services, 16, 14)
+    markup, _ = chips((W - total) / 2, 50, services, 19, 14)
     body += [
         markup,
         letter(defs, "LET’S BUILD", size, W / 2, y1, anchor="middle"),
