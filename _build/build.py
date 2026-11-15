@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Builds every SVG in ../assets for the GitHub profile README.
 
+The look is the KindaMAD Studios site's v2 theme (src/v2/styles/v2.css): saturated colour
+fields with rays and corner halftone, Kanit Black Italic two-tone lettering on an ink
+outline with a hard shadow, and slanted ink-bordered panels.
+
 GitHub renders README images through <img>, and an SVG loaded that way cannot
 fetch web fonts or external files. So every word here is converted to vector
 outlines with fontTools and every picture is embedded as a data URI. The art
@@ -11,15 +15,16 @@ looks the same on every machine and leans on no third-party service.
     python _build/build.py contributions    # only the contribution heatmap (the daily refresh)
 
 Art comes from the KindaMAD Studios site. For a full build, point KINDAMAD_SITE at a local
-checkout of it; without one the script tries kindamad.pages.dev, whose CDN may throttle it.
-The contributions refresh needs neither. Fonts download once into _build/fonts.
+checkout of it; without one the script fetches kindamad.com, whose CDN may throttle it.
+Hatch & Mash art lives in _build/art (the game is on RUN, not on the site).
+The contact button says EMAIL ME; set KINDAMAD_EMAIL to print the address on it instead.
+The contributions refresh needs none of this. Fonts download once into _build/fonts.
 """
 
 import base64
 import html
 import io
 import itertools
-import json
 import math
 import os
 import re
@@ -30,7 +35,6 @@ from functools import lru_cache
 from fontTools.pens.svgPathPen import SVGPathPen
 from fontTools.pens.transformPen import TransformPen
 from fontTools.ttLib import TTFont
-from fontTools.varLib.instancer import instantiateVariableFont
 from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -38,28 +42,29 @@ ROOT = os.path.dirname(HERE)
 ASSETS = os.path.join(ROOT, "assets")
 FONT_DIR = os.path.join(HERE, "fonts")
 ICON_DIR = os.path.join(HERE, "icons")
-SITE_URL = "https://kindamad.pages.dev"
-# Optional: a local checkout of the studio site, to build offline and to pick up a redrawn app
-# icon. Without it, art comes from the live site and the icon from _build/game-icon.json.
+ART_DIR = os.path.join(HERE, "art")
+SITE_URL = "https://kindamad.com"
+# Optional: a local checkout of the studio site, to build offline.
 SITE_CHECKOUT = os.environ.get("KINDAMAD_SITE", "")
-GAME_ICON_JSON = os.path.join(HERE, "game-icon.json")
+CONTACT = os.environ.get("KINDAMAD_EMAIL", "")
 
-# Palette lifted from the site's globals.css ("pulp comic", dark).
-BG, PANEL, INK, DIM = "#0c0908", "#120d0b", "#f4ead2", "#9a8f78"
-GOLD, EMBER, RED, DRED, OUTLINE = "#ffce45", "#ff6a1f", "#e5352b", "#a81d16", "#1a1206"
-TEAL = "#27c2b0"
-LUDO_SKY = "#19A9F2"
-# Radiation Maxxing keeps its own hazard identity, same as on the site.
-RAD_BG, LIME, PALE, HAZARD = "#080a04", "#c6ff2e", "#dfe7c8", "#ffd400"
-
-GF = "https://raw.githubusercontent.com/google/fonts/main/ofl"
-FONT_URLS = {
-    "AlfaSlabOne-Regular.ttf": f"{GF}/alfaslabone/AlfaSlabOne-Regular.ttf",
-    "SpaceMono-Regular.ttf": f"{GF}/spacemono/SpaceMono-Regular.ttf",
-    "SpaceMono-Bold.ttf": f"{GF}/spacemono/SpaceMono-Bold.ttf",
-    "Oswald-VF.ttf": f"{GF}/oswald/Oswald%5Bwght%5D.ttf",
-    "Archivo-VF.ttf": f"{GF}/archivo/Archivo%5Bwdth,wght%5D.ttf",
+# Palette: the site's v2 tokens.
+INK, INK2, CREAM = "#140d1f", "#22163a", "#fff3d6"
+GOLD, ORANGE, RED = "#ffc93c", "#ff7a1a", "#d9442f"
+TEAL, INDIGO, BLUE = "#20b2a2", "#2d1c66", "#1b6fe0"
+LIVE = "#3dff7a"
+# Each colour field: base, ray tint, halftone dot tint (the site's .f-* classes).
+FIELDS = {
+    "teal": (TEAL, "#35c7b6", "#0f8478"),
+    "red": (RED, "#e3533b", "#b5341f"),
+    "indigo": (INDIGO, "#3a2680", "#1b1145"),
+    "blue": (BLUE, "#2f84f0", "#0f4fb0"),
+    "gold": (GOLD, "#ffd864", "#e8a919"),
 }
+# The studio mark (BangLogo.astro) keeps its own colours everywhere.
+BANG_GOLD, BANG_RED, BANG_DRED, BANG_LINE = "#ffce45", "#e5352b", "#a81d16", "#1a1206"
+
+GF = "https://raw.githubusercontent.com/google/fonts/main/ofl/kanit"
 
 
 def num(v):
@@ -77,14 +82,12 @@ def esc(s):
 class Font:
     """A font that lays text out as SVG path data, with GPOS pair kerning."""
 
-    def __init__(self, file, axes=None):
+    def __init__(self, file):
         path = os.path.join(FONT_DIR, file)
         if not os.path.exists(path):
             os.makedirs(FONT_DIR, exist_ok=True)
-            urllib.request.urlretrieve(FONT_URLS[file], path)
+            urllib.request.urlretrieve(f"{GF}/{file}", path)
         font = TTFont(path)
-        if axes:
-            font = instantiateVariableFont(font, axes)
         self.font = font
         self.upm = font["head"].unitsPerEm
         self.cmap = font.getBestCmap()
@@ -175,15 +178,17 @@ class Font:
         return lines
 
 
-ALFA = Font("AlfaSlabOne-Regular.ttf")
-MONO = Font("SpaceMono-Regular.ttf")
-MONO_B = Font("SpaceMono-Bold.ttf")
-OSWALD = Font("Oswald-VF.ttf", {"wght": 600})
-OSWALD_R = Font("Oswald-VF.ttf", {"wght": 400})
-ARCHIVO = Font("Archivo-VF.ttf", {"wght": 700, "wdth": 100})
-ARCHIVO_M = Font("Archivo-VF.ttf", {"wght": 600, "wdth": 100})
+BLACK = Font("Kanit-BlackItalic.ttf")      # lettering
+XBOLD = Font("Kanit-ExtraBoldItalic.ttf")  # buttons, chips, captions
+BOLD = Font("Kanit-Bold.ttf")              # tags
+SEMI = Font("Kanit-SemiBold.ttf")
+MED = Font("Kanit-Medium.ttf")             # body copy
 
 _ids = itertools.count()
+
+
+def uid(prefix="t"):
+    return f"{prefix}{next(_ids)}"
 
 
 def text(font, s, size, x, y, fill, anchor="start", tracking=0.0, opacity=None):
@@ -191,24 +196,37 @@ def text(font, s, size, x, y, fill, anchor="start", tracking=0.0, opacity=None):
     return f'<path d="{font.path(s, size, x, y, anchor, tracking)}" fill="{fill}"{op}/>'
 
 
-def mast(defs, font, s, size, x, y, anchor="start", face=GOLD, mid=EMBER, low=RED):
-    """The site's .pulp-mast text-shadow stack (ember, red, soft drop) as geometry."""
-    ident = f"t{next(_ids)}"
-    defs.append(f'<path id="{ident}" d="{font.path(s, size, x, y, anchor)}"/>')
-    k = size / 80
+def shout(defs, font, s, size, x, y, fill=CREAM, shadow=INK, off=(2, 3), anchor="start", tracking=0.0, shadow_opacity=1.0):
+    """Copy on a colour field: the site's hard 2px/3px ink text-shadow."""
+    ident = uid()
+    defs.append(f'<path id="{ident}" d="{font.path(s, size, x, y, anchor, tracking)}"/>')
+    op = f' fill-opacity="{shadow_opacity}"' if shadow_opacity != 1 else ""
+    return f'<use href="#{ident}" x="{off[0]}" y="{off[1]}" fill="{shadow}"{op}/><use href="#{ident}" fill="{fill}"/>'
+
+
+def letter(defs, s, size, x, y, anchor="start", top=CREAM, bot=GOLD, line=INK, shadow=INK, weight=None, split=0.5):
+    """The site's .lt lettering: a two-tone fill split across the caps, over an ink
+    outline whose hard offset shadow carries the outline with it."""
+    ident = uid()
+    defs.append(f'<path id="{ident}" d="{BLACK.path(s, size, x, y, anchor, -0.01)}"/>')
+    w = weight or 3.2 + 0.067 * size
+    dx, dy = w * 0.5, w * 0.643
+    if top == bot:
+        fill = top
+    else:
+        gid = uid("g")
+        cap = BLACK.cap * size
+        defs.append(
+            f'<linearGradient id="{gid}" gradientUnits="userSpaceOnUse" x1="0" y1="{num(y - cap)}" x2="0" y2="{num(y)}">'
+            f'<stop offset="{split}" stop-color="{top}"/><stop offset="{split}" stop-color="{bot}"/></linearGradient>'
+        )
+        fill = f"url(#{gid})"
+    stroke = f'stroke-width="{num(w)}" stroke-linejoin="round"'
     return (
-        f'<use href="#{ident}" x="{num(6 * k)}" y="{num(8 * k)}" fill="#000" fill-opacity=".6" filter="url(#soft)"/>'
-        f'<use href="#{ident}" x="{num(4 * k)}" y="{num(4 * k)}" fill="{low}"/>'
-        f'<use href="#{ident}" x="{num(2 * k)}" y="{num(2 * k)}" fill="{mid}"/>'
-        f'<use href="#{ident}" fill="{face}"/>'
+        f'<use href="#{ident}" x="{num(dx)}" y="{num(dy)}" fill="{shadow}" stroke="{shadow}" {stroke}/>'
+        f'<use href="#{ident}" fill="{line}" stroke="{line}" {stroke}/>'
+        f'<use href="#{ident}" fill="{fill}"/>'
     )
-
-
-def head(defs, font, s, size, x, y, face=INK):
-    """The site's quieter .pulp-head: cream type on a hard offset."""
-    ident = f"t{next(_ids)}"
-    defs.append(f'<path id="{ident}" d="{font.path(s, size, x, y)}"/>')
-    return f'<use href="#{ident}" x="3" y="3" fill="#000" fill-opacity=".6"/><use href="#{ident}" fill="{face}"/>'
 
 
 # ── Pictures and marks ──────────────────────────────────────────────────────
@@ -228,6 +246,10 @@ def site_image(rel):
         sys.exit(f"could not fetch {SITE_URL}/{rel} ({err}). Set KINDAMAD_SITE to a local checkout of the site and rerun.")
 
 
+def local_art(name):
+    return Image.open(os.path.join(ART_DIR, name)).convert("RGBA")
+
+
 def cover(im, w, h, box=None, focus=(0.5, 0.5)):
     if box:
         im = im.crop(box)
@@ -238,10 +260,14 @@ def cover(im, w, h, box=None, focus=(0.5, 0.5)):
     return im.crop((left, top, left + w, top + h))
 
 
+def fit_width(im, w):
+    return im.resize((w, round(im.height * w / im.width)), Image.LANCZOS)
+
+
 def data_uri(im, fmt="JPEG", quality=84):
     buf = io.BytesIO()
     if fmt == "JPEG":
-        flat = Image.new("RGB", im.size, BG)
+        flat = Image.new("RGB", im.size, INK)
         flat.paste(im, mask=im.getchannel("A"))
         flat.save(buf, "JPEG", quality=quality, optimize=True, progressive=True)
         mime = "image/jpeg"
@@ -249,6 +275,17 @@ def data_uri(im, fmt="JPEG", quality=84):
         im.save(buf, "WEBP", quality=quality, method=6)
         mime = "image/webp"
     return f"data:{mime};base64,{base64.b64encode(buf.getvalue()).decode()}"
+
+
+def rgb(hex_color):
+    return tuple(int(hex_color[i:i + 2], 16) for i in (1, 3, 5))
+
+
+def tint(im, color):
+    """Recolor a silhouette, keeping its alpha."""
+    solid = Image.new("RGBA", im.size, rgb(color) + (255,))
+    solid.putalpha(im.getchannel("A"))
+    return solid
 
 
 @lru_cache(maxsize=None)
@@ -262,13 +299,12 @@ GLYPHS = {
     "play": ("fill", "M6 3.5 20.5 12 6 20.5Z"),
     "mail": ("stroke", "M3 5.5h18v13H3zM3.5 6l8.5 7 8.5-7"),
     "note": ("fill", "M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"),
-    "check": ("stroke", "M4 12.5 9.5 18 20 6.5"),
 }
 
 
-def glyph(kind, x, y, size, color, stroke_width=2.2):
+def glyph(kind, x, y, size, color, stroke_width=2.4):
     if kind == "bang":
-        return bang(x - size * 0.2, y - size * 0.2, size * 1.4)
+        return bang(x - size * 0.2, y - size * 0.2, size * 1.4, cls="")
     mode, d = GLYPHS.get(kind) or ("fill", icon_path(kind))
     place = f'transform="translate({num(x)} {num(y)}) scale({size / 24:.4f})"'
     if mode == "stroke":
@@ -279,143 +315,196 @@ def glyph(kind, x, y, size, color, stroke_width=2.2):
     return f'<path d="{d}" {place} fill="{color}"/>'
 
 
-BURST = "52,8 60,30 82,18 73,40 98,46 77,57 92,80 67,71 59,96 50,75 41,96 34,70 9,79 24,55 4,44 30,39 21,15 43,28"
+BANG_BURST = "52,8 60,30 82,18 73,40 98,46 77,57 92,80 67,71 59,96 50,75 41,96 34,70 9,79 24,55 4,44 30,39 21,15 43,28"
 
 
-def bang(x, y, size, cls="wobble"):
+def bang(x, y, size, cls="wob"):
     """The studio mark from the site's BangLogo.astro: gold burst, red bang."""
+    c = f' class="{cls}"' if cls else ""
     return (
-        f'<g transform="translate({num(x)} {num(y)}) scale({size / 100:.4f})"><g class="{cls}">'
-        f'<polygon points="{BURST}" transform="translate(2 2.5)" fill="{DRED}"/>'
-        f'<polygon points="{BURST}" fill="{GOLD}" stroke="{OUTLINE}" stroke-width="2"/>'
-        f'<g fill="{RED}" stroke="{OUTLINE}" stroke-width="1.6" stroke-linejoin="round">'
+        f'<g transform="translate({num(x)} {num(y)}) scale({size / 100:.4f})"><g{c}>'
+        f'<polygon points="{BANG_BURST}" transform="translate(2 2.5)" fill="{BANG_DRED}"/>'
+        f'<polygon points="{BANG_BURST}" fill="{BANG_GOLD}" stroke="{BANG_LINE}" stroke-width="2"/>'
+        f'<g fill="{BANG_RED}" stroke="{BANG_LINE}" stroke-width="1.6" stroke-linejoin="round">'
         '<path d="M45 31 55 31 52.5 58 47.5 58Z"/><circle cx="50" cy="65.5" r="4.6"/></g></g></g>'
     )
 
 
-def load_game_icon():
-    """The app icon vector. The site's generated game-icon.ts is the source of truth; a copy lives in
-    _build/game-icon.json so the profile builds anywhere, refreshed whenever the site checkout is at hand."""
-    source = os.path.join(SITE_CHECKOUT, "src", "data", "game-icon.ts")
-    if SITE_CHECKOUT and os.path.exists(source):
-        with open(source, encoding="utf-8") as f:
-            icon = json.loads(re.search(r"GAME_ICON\s*=\s*(\{.*\})\s*as const", f.read(), re.S).group(1))
-        with open(GAME_ICON_JSON, "w", encoding="utf-8", newline="\n") as f:
-            json.dump(icon, f, indent=2)
-            f.write("\n")
-        return icon
-    with open(GAME_ICON_JSON, encoding="utf-8") as f:
-        return json.load(f)
+def star_points(n, r_out, r_in):
+    """The site's burstpoly: a 16-point comic burst with a hand-cut wobble (deterministic)."""
+    pts = []
+    for i in range(n * 2):
+        a = math.pi * i / n - math.pi / 2
+        r = r_out * (1 + 0.06 * (((i * 7) % 5) - 2) / 2) if i % 2 == 0 else r_in
+        pts.append(f"{num(r * math.cos(a))},{num(r * math.sin(a))}")
+    return " ".join(pts)
 
 
-# GameIcon.astro's idle loop from the site's globals.css: one 3.2s clock, transforms only.
-GAME_ICON_CSS = (
-    ".gi-burst,.gi-ball,.gi-vein{transform-box:fill-box;transform-origin:center}"
-    ".gi-burst{animation:gi-breathe 3.2s ease-in-out infinite}"
-    ".gi-ball{animation:gi-twitch 3.2s linear infinite}"
-    ".gi-vein{animation:gi-throb 3.2s ease-out infinite}"
-    "@keyframes gi-breathe{0%,100%{transform:rotate(0deg) scale(1)}50%{transform:rotate(5deg) scale(1.05)}}"
-    "@keyframes gi-twitch{0%,74%,94%,100%{transform:translate(0,0) rotate(0deg)}78%{transform:translate(-14px,4px) rotate(-3deg)}"
-    "82%{transform:translate(12px,-4px) rotate(3deg)}86%{transform:translate(-9px,3px) rotate(-2deg)}"
-    "90%{transform:translate(6px,-2px) rotate(1deg)}}"
-    "@keyframes gi-throb{0%,72%,100%{transform:scale(1)}80%{transform:scale(1.22)}88%{transform:scale(.96)}}"
-)
+def burst(cx, cy, r, fill, label=None, label_fill=INK, label_size=None, rotate=0, cls="wob", n=16):
+    pts = star_points(n, r, r * 0.8)
+    c = f' class="{cls}"' if cls else ""
+    out = (
+        f'<g transform="translate({num(cx)} {num(cy)}) rotate({rotate})"><g{c}>'
+        f'<polygon points="{pts}" transform="translate({num(r * 0.07)} {num(r * 0.09)})" fill="{INK}"/>'
+        f'<polygon points="{pts}" fill="{fill}" stroke="{INK}" stroke-width="{num(max(2.5, r * 0.05))}" stroke-linejoin="round"/>'
+    )
+    if label:
+        size = label_size or r * 0.62
+        out += text(BLACK, label, size, 0, BLACK.cap * size / 2, label_fill, anchor="middle")
+    return out + "</g></g>"
 
 
-def game_icon(defs, x, y, size):
-    """The KindaMADballs app icon, from the vector the site's build_icon.py generates (same as the Play icon)."""
-    icon = load_game_icon()
-    ground, ball, burst, vein = icon["ground"], icon["ball"], icon["burst"], icon["vein"]
-    sx, sy, sr = ball["shadow"]
-    defs += [
-        f'<radialGradient id="gi-ground" cx="50%" cy="42%" r="72%"><stop offset="0" stop-color="{ground[0]}"/>'
-        f'<stop offset=".58" stop-color="{ground[1]}"/><stop offset="1" stop-color="{ground[2]}"/></radialGradient>',
-        # Play crops the listing icon to 30% corners, so this is the tile the store shows.
-        '<clipPath id="gi-tile"><rect width="512" height="512" rx="153.6"/></clipPath>',
+# ── Components ──────────────────────────────────────────────────────────────
+
+SKEW = math.tan(math.radians(8))
+
+
+def slant(x, y, w, h):
+    """A skewX(-8deg) slab, as the site's buttons and tags: the top leans right."""
+    k = h * SKEW
+    return f"{num(x + k)},{num(y)} {num(x + k + w)},{num(y)} {num(x + w)},{num(y + h)} {num(x)},{num(y + h)}"
+
+
+def tag(x, y, label, size=15, bg=INK, fg=CREAM, dot=False, rotate=0, font=BOLD):
+    """The site's .tag: an ink slab, uppercase Kanit Bold. Returns markup and width."""
+    label = label.upper()
+    tw = font.width(label, size, 0.06)
+    h = round(size * 2)
+    padx = size * 0.8
+    dw = size * 0.95 if dot else 0
+    w = padx * 2 + dw + tw
+    k = h * SKEW
+    parts = [f'<polygon points="{slant(0, 0, w, h)}" fill="{bg}"/>']
+    if dot:
+        r = size * 0.27
+        parts.append(f'<circle class="blink" cx="{num(k / 2 + padx + r)}" cy="{num(h / 2)}" r="{num(r)}" fill="{LIVE}" stroke="{INK}" stroke-width="2"/>')
+    parts.append(text(font, label, size, k / 2 + padx + dw, h / 2 + font.cap * size / 2, fg, tracking=0.06))
+    return f'<g transform="translate({num(x)} {num(y)}) rotate({rotate})">{"".join(parts)}</g>', w + k
+
+
+def slab(x, y, label, size=19, bg=RED, fg=CREAM, kind=None, glyph_color=None, h=None, sw=4, drop=(5, 6), font=XBOLD, upper=True):
+    """The site's .btn: a slanted ink-outlined slab with a hard shadow. Returns markup and size."""
+    label = label.upper() if upper else label
+    h = h or round(size * 2.45)
+    tw = font.width(label, size, 0.01)
+    gsz = size * 1.05 if kind else 0
+    gap = size * 0.5 if kind else 0
+    pad = size * 1.15
+    w = pad * 2 + gsz + gap + tw
+    k = h * SKEW
+    cx0 = x + k / 2 + pad
+    by = y + h / 2 + font.cap * size / 2
+    out = [
+        f'<polygon points="{slant(x + drop[0], y + drop[1], w, h)}" fill="{INK}"/>',
+        f'<polygon points="{slant(x, y, w, h)}" fill="{bg}" stroke="{INK}" stroke-width="{sw}" stroke-linejoin="round"/>',
     ]
-    veins = "".join(f'<path d="{d}"/>' for d in vein["paths"])
+    if kind:
+        out.append(glyph(kind, cx0, y + (h - gsz) / 2, gsz, glyph_color or fg))
+    out.append(text(font, label, size, cx0 + gsz + gap, by, fg, tracking=0.01))
+    return "".join(out), (w + k + drop[0], h + drop[1])
+
+
+def chip(x, y, label, size=15, rotate=-1.5):
+    """The site's .facts chips: cream, ink border, small hard shadow, a little crooked."""
+    label = label.upper()
+    tw = XBOLD.width(label, size)
+    w, h = tw + size * 1.6, size * 2.05
+    cx, cy = x + w / 2, y + h / 2
     return (
-        f'<g transform="translate({num(x)} {num(y)}) scale({size / 512:.5f})">'
-        '<rect x="18" y="24" width="512" height="512" rx="153.6" fill="#000" fill-opacity=".85"/>'
-        '<g clip-path="url(#gi-tile)"><rect width="512" height="512" fill="url(#gi-ground)"/>'
-        f'<g class="gi-burst"><g transform="{burst["transform"]}">'
-        f'<polygon points="{burst["points"]}" transform="translate(2 2.5)" fill="{icon["extrude"]}"/>'
-        f'<polygon points="{burst["points"]}" fill="{burst["fill"]}" stroke="{icon["outline"]}" stroke-width="2.2" stroke-linejoin="round"/></g></g>'
-        f'<g class="gi-ball"><circle cx="{sx}" cy="{sy}" r="{sr}" fill="{icon["extrude"]}"/>'
-        f'<circle cx="{ball["cx"]}" cy="{ball["cy"]}" r="{ball["rim"]}" fill="{icon["outline"]}"/>'
-        f'<circle cx="{ball["cx"]}" cy="{ball["cy"]}" r="{ball["r"]}" fill="{ball["fill"]}"/>'
-        f'<g class="gi-vein"><g transform="{vein["transform"]}" fill="{vein["fill"]}" stroke="{icon["outline"]}" '
-        f'stroke-width="{vein["strokeWidth"]}" stroke-linejoin="round" paint-order="stroke fill">{veins}</g></g></g>'
-        "</g></g>"
+        f'<g transform="rotate({rotate} {num(cx)} {num(cy)})">'
+        f'<rect x="{num(x + 3)}" y="{num(y + 4)}" width="{num(w)}" height="{num(h)}" fill="{INK}"/>'
+        f'<rect x="{num(x)}" y="{num(y)}" width="{num(w)}" height="{num(h)}" fill="{CREAM}" stroke="{INK}" stroke-width="3"/>'
+        f'{text(XBOLD, label, size, x + size * 0.8, cy + XBOLD.cap * size / 2, INK)}</g>'
+    ), w
+
+
+def chips(x, y, labels, size=15, gap=12):
+    out, rots = [], (-1.5, 1.5, -1)
+    for i, label in enumerate(labels):
+        markup, w = chip(x, y, label, size, rots[i % 3])
+        out.append(markup)
+        x += w + gap
+    return "".join(out), x - gap
+
+
+def frame(defs, x, y, w, h, rotate, href, sw=5, drop=(10, 12), fill=INK, inner=""):
+    """A slanted art panel: ink border, hard ink shadow, picture clipped inside."""
+    cid = uid("c")
+    cx, cy = x + w / 2, y + h / 2
+    defs.append(f'<clipPath id="{cid}"><rect x="{num(x)}" y="{num(y)}" width="{num(w)}" height="{num(h)}"/></clipPath>')
+    img = (f'<image href="{href}" x="{num(x)}" y="{num(y)}" width="{num(w)}" height="{num(h)}" '
+           'preserveAspectRatio="xMidYMid slice"/>') if href else ""
+    return (
+        f'<g transform="rotate({rotate} {num(cx)} {num(cy)})">'
+        f'<rect x="{num(x + drop[0])}" y="{num(y + drop[1])}" width="{num(w)}" height="{num(h)}" fill="{INK}"/>'
+        f'<rect x="{num(x)}" y="{num(y)}" width="{num(w)}" height="{num(h)}" fill="{fill}"/>'
+        f'<g clip-path="url(#{cid})">{img}{inner}</g>'
+        f'<rect x="{num(x)}" y="{num(y)}" width="{num(w)}" height="{num(h)}" fill="none" stroke="{INK}" stroke-width="{sw}"/></g>'
     )
 
 
-def burst_badge(cx, cy, size, fill, label):
+def pop(href, x, y, w, h, cls="bob", delay=None):
+    """Art that breaks out of its frame, with the site's hard drop shadow."""
+    style = f' style="animation-delay:{delay}"' if delay else ""
     return (
-        f'<g transform="translate({num(cx - size / 2)} {num(cy - size / 2)}) scale({size / 100:.4f})">'
-        '<g transform="rotate(10 51 52)">'
-        f'<polygon points="{BURST}" transform="translate(3 4)" fill="#000" fill-opacity=".6"/>'
-        f'<polygon points="{BURST}" fill="{fill}" stroke="{OUTLINE}" stroke-width="2.5"/>'
-        f'{text(ALFA, label, 19, 51, 53 + ALFA.cap * 19 / 2, OUTLINE, anchor="middle")}'
-        "</g></g>"
+        f'<g class="{cls}"{style}><image href="{href}" x="{num(x)}" y="{num(y)}" width="{num(w)}" height="{num(h)}" '
+        'filter="url(#popdrop)"/></g>'
     )
 
 
-def rays(cx, cy, r, color=GOLD, opacity=0.05, n=28):
-    """The comic spin-line halo the site puts behind hero balls, slowly turning."""
+def ray_wedges(cx, cy, r, step=15, width=6):
     wedges = []
-    for i in range(n):
-        a0 = 2 * math.pi * i / n
-        a1 = a0 + math.pi / n
+    for i in range(int(360 / step)):
+        a0 = math.radians(i * step - 90)
+        a1 = a0 + math.radians(width)
         wedges.append(
             f"M{num(cx)} {num(cy)}L{num(cx + r * math.cos(a0))} {num(cy + r * math.sin(a0))}"
             f"L{num(cx + r * math.cos(a1))} {num(cy + r * math.sin(a1))}Z"
         )
-    return f'<g class="spin"><path d="{"".join(wedges)}" fill="{color}" fill-opacity="{opacity}"/></g>'
+    return "".join(wedges)
 
 
-def radial(defs, ident, cx, cy, r, color, peak, cls=None):
-    defs.append(
-        f'<radialGradient id="{ident}" cx="{num(cx)}" cy="{num(cy)}" r="{num(r)}" gradientUnits="userSpaceOnUse">'
-        f'<stop offset="0" stop-color="{color}" stop-opacity="{peak}"/>'
-        f'<stop offset=".6" stop-color="{color}" stop-opacity="{peak / 4:.3f}"/>'
-        f'<stop offset="1" stop-color="{color}" stop-opacity="0"/></radialGradient>'
+def rays_and_dots(defs, w, h, kind, at, dot):
+    """The .field backdrop: conic rays from one point, faded out radially, and halftone
+    dots in a deeper tint masked into the top-left and bottom-right corners."""
+    _, ray, dotc = FIELDS[kind]
+    cx, cy = w * at[0], h * at[1]
+    hh = max(h, 0.45 * w)
+    reach = 0.62 * math.hypot(0.9 * w, 1.08 * hh)
+    defs += [
+        f'<radialGradient id="rayfade" cx="{num(cx)}" cy="{num(cy)}" r="{num(reach)}" gradientUnits="userSpaceOnUse">'
+        '<stop offset=".48" stop-color="#fff"/><stop offset="1" stop-color="#000"/></radialGradient>',
+        '<mask id="raym"><rect width="100%" height="100%" fill="url(#rayfade)"/></mask>',
+        f'<pattern id="dots" width="{dot}" height="{dot}" patternUnits="userSpaceOnUse">'
+        f'<circle cx="{num(dot / 2)}" cy="{num(dot / 2)}" r="{num(dot * 0.2)}" fill="{dotc}"/></pattern>',
+        '<linearGradient id="dotfade" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff"/>'
+        '<stop offset=".26" stop-color="#000"/><stop offset=".74" stop-color="#000"/><stop offset="1" stop-color="#fff"/></linearGradient>',
+        '<mask id="dotm"><rect width="100%" height="100%" fill="url(#dotfade)"/></mask>',
+    ]
+    return (
+        f'<path d="{ray_wedges(cx, cy, 2.2 * math.hypot(w, h))}" fill="{ray}" mask="url(#raym)"/>'
+        '<rect width="100%" height="100%" fill="url(#dots)" mask="url(#dotm)"/>'
     )
-    css = f' class="{cls}"' if cls else ""
-    return f'<rect width="100%" height="100%" fill="url(#{ident})"{css}/>'
 
 
-def trefoil(cx, cy, r):
-    def at(radius, angle):
-        return f"{num(cx + radius * math.cos(angle))} {num(cy + radius * math.sin(angle))}"
-
-    inner = r * 0.24
-    blades = []
-    for mid in (-150, -30, 90):
-        a0, a1 = math.radians(mid - 30), math.radians(mid + 30)
-        blades.append(
-            f"M{at(inner, a0)}L{at(r, a0)}A{num(r)} {num(r)} 0 0 1 {at(r, a1)}"
-            f"L{at(inner, a1)}A{num(inner)} {num(inner)} 0 0 0 {at(inner, a0)}Z"
-        )
-    return "".join(blades)
-
-
-def label_box(x, y, label, font, size, fg, fill, stroke, tracking=0.08, dot=None, rotate=0,
-              stroke_opacity=1, fill_opacity=1, shadow=True, pad=14):
-    tw = font.width(label, size, tracking)
-    dw = 18 if dot else 0
-    w, h = pad * 2 + dw + tw, size + 22
-    parts = []
-    if shadow:
-        parts.append(f'<rect x="4" y="4" width="{num(w)}" height="{num(h)}" fill="#000" fill-opacity=".6"/>')
-    parts.append(
-        f'<rect width="{num(w)}" height="{num(h)}" fill="{fill}" fill-opacity="{fill_opacity}" '
-        f'stroke="{stroke}" stroke-width="2.5" stroke-opacity="{stroke_opacity}"/>'
+def field(defs, w, h, kind, cut=(0, 14, 0, 14), at=(0.5, 0.4), dot=16, drop=8, sw=5):
+    """One comic panel per image: a colour field with slanted, hand-cut edges, an ink
+    border and a hard ink drop. Content goes between back and front."""
+    base = FIELDS[kind][0]
+    tl, tr, br, bl = cut
+    m = sw / 2
+    x0, x1 = m, w - m - drop * 0.8
+    y0, y1 = m, h - m - drop
+    pts = [(x0, y0 + tl), (x1, y0 + tr), (x1, y1 - br), (x0, y1 - bl)]
+    poly = " ".join(f"{num(x)},{num(y)}" for x, y in pts)
+    shadow = " ".join(f"{num(x + drop * 0.8)},{num(y + drop)}" for x, y in pts)
+    defs.append(f'<clipPath id="fld"><polygon points="{poly}"/></clipPath>')
+    back = (
+        f'<polygon points="{shadow}" fill="{INK}"/><polygon points="{poly}" fill="{base}"/>'
+        f'<g clip-path="url(#fld)">{rays_and_dots(defs, w, h, kind, at, dot)}'
     )
-    if dot:
-        parts.append(f'<circle class="pulse" cx="{pad + 5}" cy="{num(h / 2)}" r="5" fill="{dot}"/>')
-    parts.append(text(font, label, size, pad + dw, h / 2 + font.cap * size / 2, fg, tracking=tracking))
-    return f'<g transform="translate({num(x)} {num(y)}) rotate({rotate})">{"".join(parts)}</g>'
+    front = f'</g><polygon points="{poly}" fill="none" stroke="{INK}" stroke-width="{sw}" stroke-linejoin="round"/>'
+    return back, front
 
 
 # ── Documents ───────────────────────────────────────────────────────────────
@@ -423,29 +512,24 @@ def label_box(x, y, label, font, size, fg, fill, stroke, tracking=0.08, dot=None
 # Every loop starts from its resting pose, so a renderer that only paints the
 # first frame still shows the finished art.
 BASE_CSS = (
-    ".wobble{animation:wobble 3.2s ease-in-out infinite;transform-box:fill-box;transform-origin:center}"
-    "@keyframes wobble{0%,100%{transform:rotate(0) scale(1)}30%{transform:rotate(-7deg) scale(1.05)}"
-    "70%{transform:rotate(6deg) scale(1.03)}}"
-    ".pulse{animation:pulse 1.6s ease-in-out infinite}"
-    "@keyframes pulse{0%,100%{opacity:1}50%{opacity:.2}}"
-    ".glow{animation:glow 5s ease-in-out infinite}"
-    "@keyframes glow{0%,100%{opacity:1}50%{opacity:.65}}"
-    ".spin{animation:spin 60s linear infinite;transform-box:fill-box;transform-origin:center}"
+    ".wob,.bob,.roll,.spin{transform-box:fill-box;transform-origin:center}"
+    ".wob{animation:wob 3.4s ease-in-out infinite}"
+    "@keyframes wob{0%,100%{transform:none}30%{transform:rotate(-6deg) scale(.97)}70%{transform:rotate(5deg) scale(1.03)}}"
+    ".bob{animation:bob 3.2s ease-in-out infinite}"
+    "@keyframes bob{0%,100%{transform:none}50%{transform:translate(0,-10px) rotate(-4deg)}}"
+    ".roll{animation:roll 2.6s ease-in-out infinite}"
+    "@keyframes roll{0%,100%{transform:none}33%{transform:rotate(-12deg)}66%{transform:translate(0,-8px) rotate(10deg)}}"
+    ".spin{animation:spin 14s linear infinite}"
     "@keyframes spin{to{transform:rotate(360deg)}}"
-    ".s24{animation-duration:24s}.s8{animation-duration:8s}.s11{animation-duration:11s}"
-    ".rev{animation-direction:reverse}.slow{animation-duration:5s}"
+    ".blink{animation:blink 1.1s steps(2) infinite}"
+    "@keyframes blink{50%{opacity:.25}}"
     "@media (prefers-reduced-motion:reduce){*{animation:none!important}}"
 )
 
 COMMON_DEFS = (
-    '<filter id="soft" x="-20%" y="-40%" width="140%" height="180%"><feGaussianBlur stdDeviation="4"/></filter>'
-    '<pattern id="halftone" width="10" height="10" patternUnits="userSpaceOnUse">'
-    '<circle cx="5" cy="5" r="1.4" fill="#fff" fill-opacity=".07"/></pattern>'
-    f'<linearGradient id="bar" x1="0" x2="1"><stop offset="0" stop-color="{RED}"/>'
-    f'<stop offset=".5" stop-color="{EMBER}"/><stop offset="1" stop-color="{GOLD}"/></linearGradient>'
+    f'<filter id="popdrop" x="-20%" y="-20%" width="150%" height="150%">'
+    f'<feDropShadow dx="5" dy="7" stdDeviation="0" flood-color="{INK}" flood-opacity=".55"/></filter>'
 )
-
-HALFTONE = '<rect width="100%" height="100%" fill="url(#halftone)"/>'
 
 
 def svg(w, h, label, body, defs, css=""):
@@ -456,563 +540,355 @@ def svg(w, h, label, body, defs, css=""):
     )
 
 
-def panel(defs, w, h, fill=PANEL, rx=18, stroke=INK, sw=4, stroke_opacity=1.0, drop=8):
-    """A pulp panel: fill, ink border, hard black drop. Content goes between back and front."""
-    x = sw / 2
-    rect = f'x="{num(x)}" y="{num(x)}" width="{num(w - sw)}" height="{num(h - sw - drop)}" rx="{rx}"'
-    defs.append(f'<clipPath id="panel"><rect {rect}/></clipPath>')
-    back = f'<rect {rect} fill="{fill}"/>'
-    if drop:
-        back = f'<rect x="{num(x)}" y="{num(x + drop)}" width="{num(w - sw)}" height="{num(h - sw - drop)}" rx="{rx}" fill="#000"/>' + back
-    front = f'<rect {rect} fill="none" stroke="{stroke}" stroke-width="{sw}" stroke-opacity="{stroke_opacity}"/>'
-    return back + '<g clip-path="url(#panel)">', "</g>" + front
-
-
-def write(name, markup):
-    # Restart path ids per file, so an asset comes out byte-identical whether it
+def fresh():
+    # Restart ids per file, so an asset comes out byte-identical whether it
     # was built alone or as part of the full run (no empty daily commits).
     global _ids
     _ids = itertools.count()
+    return [], []
+
+
+def write(name, markup):
     os.makedirs(ASSETS, exist_ok=True)
     with open(os.path.join(ASSETS, name), "w", encoding="utf-8", newline="\n") as f:
         f.write(markup)
     print(f"  {name:26} {len(markup.encode()) / 1024:7.1f} KB")
 
 
+def section_title(defs, title, note, x, y, size, maxw, w, note_fill=CREAM, note_shadow=True, **style):
+    """The site's .shead: big lettering on the left, a short note bottom-right."""
+    size = BLACK.fit(title, maxw, size)
+    out = [letter(defs, title, size, x, y, **style)]
+    if note:
+        nw = 330
+        lines = MED.wrap(note, 20, nw)
+        for i, line in enumerate(lines):
+            ly = y - (len(lines) - 1 - i) * 28
+            nx = w - 60 - nw
+            out.append(shout(defs, MED, line, 20, nx, ly, note_fill, off=(1, 2), shadow_opacity=0.45) if note_shadow
+                       else text(MED, line, 20, nx, ly, note_fill))
+    return "".join(out)
+
+
 # ── Hero ────────────────────────────────────────────────────────────────────
 
 
 def hero():
-    W, H = 1200, 540
-    defs, body = [], []
-    back, front = panel(defs, W, H, fill=BG, rx=26)
-    px, py, ps = 300, 284, 330
-    fw = ps + 12
-    defs.append(f'<clipPath id="face"><rect x="{px - ps / 2}" y="{py - ps / 2}" width="{ps}" height="{ps}" rx="16"/></clipPath>')
-    face = data_uri(cover(site_image("madhav.jpg"), 660, 660), quality=86)
-
+    W, H = 1200, 590
+    defs, body = fresh()
+    back, front = field(defs, W, H, "teal", cut=(0, 0, 20, 0), at=(0.25, 0.5), dot=18)
+    px, py, ps = 288, 292, 340
+    face = data_uri(cover(site_image("madhav.jpg"), 680, 680), quality=86)
+    founder, fw = tag(0, 0, "Founder, KindaMAD Studios", 17, GOLD, INK)
     body += [
         back,
-        radial(defs, "ember", px, py, 560, EMBER, 0.36, cls="glow"),
-        rays(px, py, 900, GOLD, 0.035),
-        HALFTONE,
-        f'<rect width="{W}" height="10" fill="url(#bar)"/>',
-        f'<g transform="rotate(-3 {px} {py})">'
-        f'<rect x="{px - fw / 2 + 10}" y="{py - fw / 2 + 14}" width="{fw}" height="{fw}" rx="22" fill="#000" fill-opacity=".75"/>'
-        f'<rect x="{px - fw / 2}" y="{py - fw / 2}" width="{fw}" height="{fw}" rx="22" fill="{INK}"/>'
-        f'<image href="{face}" x="{px - ps / 2}" y="{py - ps / 2}" width="{ps}" height="{ps}" '
-        'clip-path="url(#face)" preserveAspectRatio="xMidYMid slice"/></g>',
-        label_box(150, 430, "FOUNDER", ARCHIVO, 18, OUTLINE, GOLD, INK, rotate=-4),
-        bang(78, 56, 126),
+        frame(defs, px - ps / 2, py - ps / 2, ps, ps, -3, face, sw=6, drop=(13, 15), fill="#1d1210"),
+        f'<g transform="translate({num(px + ps / 2 - fw + 26)} {num(py + ps / 2 - 14)}) rotate(-2)">{founder}</g>',
+        bang(46, 34, 140),
     ]
-
-    x0 = 548
-    maxw = W - x0 - 58
-    body.append(text(MONO, "FOUNDER · KINDAMAD STUDIOS", 19, x0, 128, EMBER, tracking=0.22))
-    size = ALFA.fit("GANGNEJA", maxw, 122)
-    y1 = 128 + 32 + ALFA.cap * size
-    y2 = y1 + size * 0.94
-    body.append(mast(defs, ALFA, "MADHAV", size, x0, y1))
-    body.append(mast(defs, ALFA, "GANGNEJA", size, x0, y2, face=RED, mid=EMBER, low=DRED))
-    t1 = y2 + 64
-    for i, line in enumerate(("CREATOR. GAME DEV.", "PROFESSIONALLY KINDA MAD.")):
-        body.append(f'<g transform="translate({x0} {num(t1 + i * 44)}) skewX(-8)">{text(OSWALD, line, 36, 0, 0, GOLD)}</g>')
-    body.append(text(MONO, "Content creator turned game developer · India", 17, x0, t1 + 44 + 54, DIM))
-    body.append(front)
+    x0 = 552
+    size = BLACK.fit("GANGNEJA", W - x0 - 90, 136)
+    y1 = 96 + BLACK.cap * size
+    y2 = y1 + size * 0.88
+    body += [
+        letter(defs, "MADHAV", size, x0, y1),
+        letter(defs, "GANGNEJA", size, x0 + 30, y2, top=ORANGE, bot=RED),
+    ]
+    t = y2 + 78
+    body += [
+        letter(defs, "CREATOR. GAME DEV.", 40, x0 + 36, t, top=CREAM, bot=CREAM),
+        letter(defs, "PROFESSIONALLY KINDA MAD.", 40, x0 + 36, t + 48, top=GOLD, bot=GOLD),
+        text(MED, "Content creator turned game developer, from India.", 22, x0 + 40, t + 104, INK),
+        front,
+    ]
     write("hero.svg", svg(W, H, "Madhav Gangneja, founder of KindaMAD Studios. Creator. Game dev. Professionally kinda mad.", body, defs))
 
 
 # ── Link buttons ────────────────────────────────────────────────────────────
 
 
-def button(name, label, kind, fill, fg, glyph_color, font=None, size=17, tracking=0.06):
-    font = font or ARCHIVO
-    h, pad, gsz, gap, drop = 46, 16, 22, 11, 5
-    w = pad + gsz + gap + font.width(label, size, tracking) + pad + 2
-    W, H = math.ceil(2 + w + drop + 1), 2 + h + drop + 1
-    body = [
-        f'<rect x="{2 + drop}" y="{2 + drop}" width="{num(w)}" height="{h}" fill="#000" fill-opacity=".55"/>',
-        f'<rect x="2" y="2" width="{num(w)}" height="{h}" fill="{fill}" stroke="{INK}" stroke-width="3"/>',
-        glyph(kind, 2 + pad, 2 + (h - gsz) / 2, gsz, glyph_color),
-        text(font, label, size, 2 + pad + gsz + gap, 2 + h / 2 + font.cap * size / 2, fg, tracking=tracking),
-    ]
-    write(f"btn-{name}.svg", svg(W, H, label, body, []))
+def button(name, label, kind, bg, fg, glyph_color, size=20, upper=True):
+    defs, body = fresh()
+    markup, (w, h) = slab(3, 3, label, size, bg, fg, kind, glyph_color, upper=upper)
+    write(f"btn-{name}.svg", svg(math.ceil(w + 6), math.ceil(h + 6), label, [markup], defs))
 
 
 def buttons():
-    button("play", "PLAY FREE ON ANDROID", "play", RED, "#fff", "#fff")
-    button("site", "KINDAMAD.PAGES.DEV", "bang", GOLD, OUTLINE, OUTLINE)
-    button("email", "kindamad.hav@gmail.com", "mail", PANEL, GOLD, INK, font=MONO_B, size=16, tracking=0)
+    button("play", "Play free on Android", "play", RED, CREAM, CREAM)
+    button("site", "kindamad.com", "bang", GOLD, INK, INK)
+    if CONTACT:
+        button("email", CONTACT, "mail", CREAM, INK, INK, upper=False)
+    else:
+        button("email", "Email me", "mail", CREAM, INK, INK)
     for name, label, slug, color in (
-        ("youtube", "YOUTUBE", "youtube", "#ff0033"),
-        ("instagram", "INSTAGRAM", "instagram", "#e1306c"),
-        ("discord", "DISCORD", "discord", "#5865f2"),
+        ("youtube", "YouTube", "youtube", "#ff0033"),
+        ("instagram", "Instagram", "instagram", "#e1306c"),
+        ("discord", "Discord", "discord", "#5865f2"),
         ("x", "X", "x", INK),
-        ("itch", "ITCH.IO", "itchdotio", "#fa5c5c"),
-        ("linkedin", "LINKEDIN", "linkedin", INK),
+        ("itch", "itch.io", "itchdotio", "#fa5c5c"),
+        ("linkedin", "LinkedIn", "linkedin", "#0a66c2"),
     ):
-        button(name, label, slug, PANEL, INK, color)
+        button(name, label, slug, CREAM, INK, color, size=18)
+
+
+# ── Right now ───────────────────────────────────────────────────────────────
+
+
+def now():
+    """What's on the bench: three cream cards on a red field, art as the markers."""
+    W = 1200
+    pad, gap, top, card_h = 50, 30, 150, 262
+    colw = (W - 8 - pad * 2 - gap * 2) / 3
+    H = top + card_h + 58
+    defs, body = fresh()
+    back, front = field(defs, W, H, "red", cut=(16, 0, 0, 12), at=(0.15, 0.2))
+    icon = data_uri(site_image("v2/game-icon.webp").resize((176, 176), Image.LANCZOS), fmt="WEBP", quality=90)
+    die = data_uri(site_image("ludo/el/dice-5.webp").resize((152, 160), Image.LANCZOS), fmt="WEBP", quality=90)
+    hammer = site_image("renders/BONKER.png").resize((176, 176), Image.LANCZOS)
+    hammer_ink = data_uri(tint(hammer, INK), fmt="WEBP", quality=90)
+    hammer_red = data_uri(tint(hammer, RED), fmt="WEBP", quality=90)
+    rows = [
+        ("Shipping", RED, CREAM, True, "BALL SURVIVORS",
+         "A survivor roguelike, live on Google Play and still getting new weapons every update."),
+        ("Live", BLUE, CREAM, True, "PLAY LUDO",
+         "Ludo where every capture is a 10-second duel. Out now on Google Play."),
+        ("Tinkering", INK, GOLD, False, "THE WORKSHOP",
+         "Custom 2D physics, Unity editor tools, and MCP pipelines for Unity, Unreal, Blender and FL Studio."),
+    ]
+    body += [back, section_title(defs, "RIGHT NOW", "What's on the bench, and what's already out.", pad, 112, 78, 600, W)]
+    for i, (status, bg, fg, dot, title, copy) in enumerate(rows):
+        x = pad + i * (colw + gap)
+        y = top
+        rot = (-1.4, 1, -0.8)[i]
+        cx, cy = x + colw / 2, y + card_h / 2
+        mx, my, ms = x + 22, y + 20, 84
+        if i == 0:
+            marker = f'<image href="{icon}" x="{num(mx)}" y="{num(my)}" width="{ms}" height="{ms}" filter="url(#popdrop)"/>'
+        elif i == 1:
+            marker = f'<g class="roll"><image href="{die}" x="{num(mx + 4)}" y="{num(my)}" width="76" height="80" filter="url(#popdrop)"/></g>'
+        else:
+            marker = (f'<g class="wob"><image href="{hammer_red}" x="{num(mx + 4)}" y="{num(my + 5)}" width="{ms}" height="{ms}"/>'
+                      f'<image href="{hammer_ink}" x="{num(mx)}" y="{num(my)}" width="{ms}" height="{ms}"/></g>')
+        status_tag, _ = tag(x + 122, y + 46, status, 16, bg, fg, dot=dot)
+        tw = colw - 48
+        lines = MED.wrap(copy, 19, tw)
+        assert len(lines) <= 3, lines
+        body += [
+            f'<g transform="rotate({rot} {num(cx)} {num(cy)})">'
+            f'<rect x="{num(x + 8)}" y="{num(y + 10)}" width="{num(colw)}" height="{card_h}" fill="{INK}"/>'
+            f'<rect x="{num(x)}" y="{y}" width="{num(colw)}" height="{card_h}" fill="{CREAM}" stroke="{INK}" stroke-width="4"/>',
+            marker,
+            status_tag,
+            text(BLACK, title, BLACK.fit(title, tw, 36), x + 24, y + 148, INK),
+            *[text(MED, line, 19, x + 24, y + 182 + j * 25, INK, opacity=0.86) for j, line in enumerate(lines)],
+            "</g>",
+        ]
+    body.append(front)
+    label = "Right now. " + " ".join(f"{s}: {t.title()}. {c}" for s, _, _, _, t, c in rows)
+    write("now.svg", svg(W, H, label, body, defs))
 
 
 # ── Stats band ──────────────────────────────────────────────────────────────
 
 
 def stats():
-    W, H = 1200, 248
-    items = [
-        ("200M+", "VIEWS IN THE LAST YEAR", "across all channels"),
-        ("4", "JAM PODIUMS", "2025 · two 1st places"),
-        ("40+", "WEAPONS DESIGNED", "across KindaMADballs modes"),
-        ("2026", "STUDIO FOUNDED", "built in public, ever since"),
-    ]
-    defs, body = [], []
-    back, front = panel(defs, W, H, sw=3)
-    col = (W - 3) / 4
-    label_size = min(ARCHIVO.fit(label, col - 32, 20, 0.08) for _, label, _ in items)
-    body += [back, HALFTONE]
-    for i, (n, label, sub) in enumerate(items):
-        cx = 1.5 + col * (i + 0.5)
-        body.append(mast(defs, ALFA, n, 72, cx, 112, anchor="middle"))
-        body.append(text(ARCHIVO, label, label_size, cx, 160, INK, anchor="middle", tracking=0.08))
-        body.append(text(MONO, sub, 16, cx, 196, DIM, anchor="middle"))
-        if i:
-            x = num(1.5 + col * i)
-            body.append(
-                f'<line x1="{x}" y1="44" x2="{x}" y2="206" stroke="{INK}" stroke-opacity=".14" '
-                'stroke-width="2" stroke-dasharray="3 7"/>'
-            )
+    """The site's proof band: three big numbers on blue."""
+    W, H = 1200, 288
+    defs, body = fresh()
+    back, front = field(defs, W, H, "blue", cut=(0, 14, 12, 0), at=(0.5, 0.55))
+    items = [("200M+", "VIEWS IN THE LAST YEAR"), ("4", "GAME JAM PODIUMS"), ("40+", "BALL WEAPONS DESIGNED")]
+    inset = 50
+    col = (W - 8 - inset * 2) / 3
+    body.append(back)
+    for i, (n, cap) in enumerate(items):
+        cx = inset + col * (i + 0.5)
+        body.append(letter(defs, n, 116, cx, 64 + BLACK.cap * 116, anchor="middle"))
+        body.append(shout(defs, XBOLD, cap, 23, cx, 222, anchor="middle"))
     body.append(front)
-    write("stats.svg", svg(W, H, "200M+ views in the last year. 4 jam podiums. 40+ weapons designed. Studio founded 2026.", body, defs))
+    write("stats.svg", svg(W, H, "200M+ views in the last year. 4 game jam podiums. 40+ ball weapons designed.", body, defs))
 
 
 # ── Section heads ───────────────────────────────────────────────────────────
 
 
-def section(name, title, kicker, label):
-    W, H = 1200, 138
-    defs, body = [], []
-    back, front = panel(defs, W, H, fill=BG, rx=18, sw=2, stroke_opacity=0.22, drop=0)
-    body += [
-        back,
-        radial(defs, "ember", 70, 69, 420, EMBER, 0.22),
-        HALFTONE,
-        f'<rect y="{H - 8}" width="{W}" height="8" fill="url(#bar)"/>',
-        bang(22, 22, 92),
-        text(MONO, kicker, 15, 132, 52, EMBER, tracking=0.24),
-        mast(defs, ALFA, title, ALFA.fit(title, W - 132 - 44, 60), 132, 112),
-        front,
-    ]
+def head(name, kind, title, note, label, cut, at):
+    W, H = 1200, 214
+    defs, body = fresh()
+    back, front = field(defs, W, H, kind, cut=cut, at=at)
+    body += [back, section_title(defs, title, note, 50, 150, 104, 700, W), front]
     write(f"head-{name}.svg", svg(W, H, label, body, defs))
 
 
 # ── Project cards ───────────────────────────────────────────────────────────
 
-CARD_W, CARD_H, ART_H = 600, 600, 312
+CARD_W, CARD_H = 600, 712
+ART = (42, 40, 500, 272)  # x, y, w, h of the art panel
 
 
-def card_start(defs, fill):
-    back, front = panel(defs, CARD_W, CARD_H, fill=fill)
-    defs.append(f'<clipPath id="art"><rect width="{CARD_W}" height="{ART_H}"/></clipPath>')
-    divider = f'<rect y="{ART_H}" width="{CARD_W}" height="4" fill="{INK}"/>'
-    return back, front, divider
-
-
-def pulp_copy(defs, kicker, title, copy, cta):
-    x, maxw = 32, CARD_W - 64
-    out = [
-        text(MONO, kicker, 14, x, 360, EMBER, tracking=0.2),
-        mast(defs, ALFA, title, ALFA.fit(title, maxw, 46), x, 414),
-    ]
-    lines = OSWALD_R.wrap(copy, 21, maxw)
+def card(name, kind, cut, at, art, tags, title, blurb, facts, cta, label, rot=-1.5):
+    """One title per card, laid out like the site's lineup rows: slanted art panel with
+    pop-outs, tags, lettering, blurb, fact chips, a slab CTA."""
+    defs, body = fresh()
+    back, front = field(defs, CARD_W, CARD_H, kind, cut=cut, at=at, dot=14)
+    x, maxw = 46, CARD_W - 96
+    body += [back, art(defs, rot)]
+    tx = x
+    for t in tags:
+        markup, tw = t(tx, 348)
+        body.append(markup)
+        tx += tw + 12
+    size = BLACK.fit(title, maxw, 56)
+    body.append(letter(defs, title, size, x, 446))
+    lines = MED.wrap(blurb, 19, maxw - 10)
     assert len(lines) <= 3, f"copy runs long: {lines}"
-    out += [text(OSWALD_R, line, 21, x, 456 + i * 30, INK, opacity=0.82) for i, line in enumerate(lines)]
-    out.append(text(ARCHIVO, cta, 16, x, 562, GOLD, tracking=0.05))
-    return out
+    body += [shout(defs, MED, line, 19, x, 486 + i * 26, off=(1, 2), shadow_opacity=0.45) for i, line in enumerate(lines)]
+    markup, _ = chips(x, 572, facts, 15)
+    body.append(markup)
+    label_cta, bg, fg = cta
+    markup, _ = slab(x, 630, label_cta, 18, bg, fg)
+    body += [markup, front]
+    write(f"card-{name}.svg", svg(CARD_W, CARD_H, label, body, defs))
 
 
-def card_balls():
-    defs, body = [], []
-    back, front, divider = card_start(defs, PANEL)
-    # The Ball Survivors key art. Measured on the 1600x900 source: the logo runs
-    # x 718-1447 and the dated "LAST WEEK" sticker starts at y 664, so the crop
-    # keeps the whole logo and stops just above the sticker.
-    art = cover(site_image("trailer/playtest-poster.webp"), 1192, 624, box=(212, 0, 1482, 662))
-    defs.append(
-        '<linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset=".5" stop-color="#000" stop-opacity="0"/>'
-        '<stop offset="1" stop-color="#000" stop-opacity=".55"/></linearGradient>'
+def art_survivors(defs, rot):
+    x, y, w, h = ART
+    plate = data_uri(cover(site_image("v2/plates/04_swarm-lightning.webp"), w * 2, h * 2), quality=82)
+    minigun = fit_width(site_image("v2/heroes/minigun.webp"), 460)
+    swarm = fit_width(site_image("v2/heroes/swarm.webp"), 300)
+    return (
+        frame(defs, x, y, w, h, rot, plate)
+        + pop(data_uri(minigun, fmt="WEBP", quality=88), 10, 204, 230, 230 * minigun.height / minigun.width)
+        + pop(data_uri(swarm, fmt="WEBP", quality=88), 432, 10, 150, 150 * swarm.height / swarm.width, delay="-1.2s")
     )
-    body += [
-        back,
-        '<g clip-path="url(#art)">',
-        f'<image href="{data_uri(art, quality=82)}" width="{CARD_W}" height="{ART_H}" preserveAspectRatio="xMidYMid slice"/>',
-        f'<rect width="{CARD_W}" height="{ART_H}" fill="url(#fade)"/>',
-        label_box(24, 24, "FREE PLAYTEST · ANDROID", ARCHIVO, 14, "#fff", RED, INK, dot="#fff"),
-        "</g>",
-        divider,
-    ]
-    body += pulp_copy(
-        defs,
-        "TITLE NO. 01 · SURVIVOR ROGUELIKE",
-        "KINDAMADBALLS",
-        "Survive endless swarms. Stack wild ball weapons. Climb the leaderboards. Free on Android.",
-        "ENTER THE ARSENAL →",
+
+
+def art_ludo(defs, rot):
+    x, y, w, h = ART
+    board = data_uri(cover(site_image("ludo/key/hero-clean-cross-1280.webp"), w * 2, h * 2), quality=84)
+    die = site_image("ludo/el/dice-5.webp").resize((192, 202), Image.LANCZOS)
+    pawn = site_image("ludo/el/pawn-token-red.webp").resize((160, 158), Image.LANCZOS)
+    return (
+        frame(defs, x, y, w, h, rot, board)
+        + f'<g class="roll"><image href="{data_uri(die, fmt="WEBP", quality=90)}" x="476" y="10" width="96" height="101" filter="url(#popdrop)"/></g>'
+        + pop(data_uri(pawn, fmt="WEBP", quality=90), 18, 258, 80, 79, delay="-.8s")
     )
-    body.append(front)
-    write("card-kindamadballs.svg", svg(CARD_W, CARD_H, "KindaMADballs: survivor roguelike, free playtest on Android", body, defs))
 
 
-def card_ludo():
-    """Play Ludo wears its own look inside the pulp frame, like the site's LudoCard: the
-    burst sky, the 3D board and the logo art. Copy comes from the site's src/data/ludo.ts."""
-    defs, body = [], []
-    back, front, divider = card_start(defs, PANEL)
-    board = site_image("ludo/board/cross-token-800.webp").convert("RGBA").resize((400, 320), Image.LANCZOS)
-    logo = site_image("ludo/logo/logo-cutout-480.webp").convert("RGBA").resize((300, 229), Image.LANCZOS)
-    defs.append(
-        '<radialGradient id="sky" cx="400" cy="150" r="520" gradientUnits="userSpaceOnUse">'
-        '<stop offset="0" stop-color="#19A9F2"/><stop offset=".46" stop-color="#0875E8"/>'
-        '<stop offset="1" stop-color="#073B91"/></radialGradient>'
+def art_hatch(defs, rot):
+    x, y, w, h = ART
+    play = data_uri(cover(local_art("hatch-and-mash-play.jpg"), w * 2, h * 2, focus=(0.5, 0.5)), quality=84)
+    thumb = data_uri(local_art("hatch-and-mash-thumb.jpg").resize((420, 420), Image.LANCZOS), quality=88)
+    ts = 196
+    tx, ty = CARD_W - ts - 40, 12
+    return frame(defs, x, y, w, h, rot, play) + (
+        f'<g class="wob" style="animation-duration:4.2s">{frame(defs, tx, ty, ts, ts, 6, thumb, sw=5, drop=(8, 10))}</g>'
     )
-    body += [
-        back,
-        '<g clip-path="url(#art)">',
-        f'<rect width="{CARD_W}" height="{ART_H}" fill="url(#sky)"/>',
-        rays(400, 150, 700, "#fff", 0.12),
-        f'<g transform="rotate(-6 400 170)"><image href="{data_uri(board, fmt="WEBP", quality=88)}" '
-        'x="226" y="22" width="400" height="320"/></g>',
-        f'<g class="wobble slow"><image href="{data_uri(logo, fmt="WEBP", quality=90)}" x="8" y="60" width="300" height="229"/></g>',
-        label_box(24, 24, "COMING SOON · GOOGLE PLAY", ARCHIVO, 13, "#fff", "#073B91", INK, dot="#FFC61B"),
-        "</g>",
-        divider,
-    ]
-    body += pulp_copy(
-        defs,
-        "TITLE NO. 02 · LUDO WITH A TWIST",
-        "PLAY LUDO",
-        "Classic Ludo where every capture is a 10-second duel. Online, or on one phone. Published by MMA Studios.",
-        "SEE THE GAME →",
+
+
+def art_rayban(defs, rot):
+    x, y, w, h = ART
+    a = data_uri(cover(site_image("case/rayban/tour-blueprint.webp"), 300, 400, box=(0, 0, 1200, 1600)), quality=84)
+    b = data_uri(cover(site_image("case/rayban/tour-institute.webp"), 300, 400, box=(0, 0, 1200, 1600)), quality=84)
+    sw_, sh_ = 150, 200
+    inner = (
+        f'<path d="{ray_wedges(x + w / 2, y + h * 0.55, w * 1.2)}" fill="#3a2680"/>'
+        + frame(defs, x + w / 2 - sw_ - 6, y + 40, sw_, sh_, -5, a, sw=4, drop=(7, 9))
+        + frame(defs, x + w / 2 + 12, y + 30, sw_, sh_, 4, b, sw=4, drop=(7, 9))
     )
-    body.append(front)
-    write("card-ludo.svg", svg(CARD_W, CARD_H, "Play Ludo: Ludo with a twist, coming soon on Google Play", body, defs))
+    return frame(defs, x, y, w, h, rot, None, fill=INDIGO, inner=inner)
 
 
-def card_radiation():
-    defs, body = [], []
-    back, front, divider = card_start(defs, RAD_BG)
-    defs += [
-        f'<pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0V24" fill="none" stroke="{LIME}" stroke-opacity=".08"/></pattern>',
-        f'<pattern id="scan" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="1" fill="{LIME}" fill-opacity=".05"/></pattern>',
-        f'<pattern id="hazard" width="28" height="28" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="14" height="28" fill="{HAZARD}"/><rect x="14" width="14" height="28" fill="#0b0b07"/></pattern>',
-        '<filter id="limeglow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="9" result="b"/>'
-        '<feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>',
-    ]
-    cx, cy, r = 300, 150, 90
-    body += [
-        back,
-        '<g clip-path="url(#art)">',
-        '<rect width="100%" height="100%" fill="url(#grid)"/>',
-        radial(defs, "lime", cx, cy, 300, LIME, 0.2, cls="glow"),
-        f'<g filter="url(#limeglow)">'
-        f'<circle cx="{cx}" cy="{cy}" r="{r + 22}" fill="none" stroke="{LIME}" stroke-width="12"/>'
-        f'<g class="spin s24"><circle cx="{cx}" cy="{cy}" r="{r}" fill="none"/><path d="{trefoil(cx, cy, r)}" fill="{LIME}"/></g>'
-        f'<circle cx="{cx}" cy="{cy}" r="{num(r * 0.15)}" fill="{LIME}"/></g>',
-        '<rect width="100%" height="100%" fill="url(#scan)"/>',
-        f'<rect y="{ART_H - 16}" width="{CARD_W}" height="16" fill="url(#hazard)"/>',
-        label_box(24, 24, "IN DEVELOPMENT · STEAM", MONO_B, 12, LIME, RAD_BG, LIME, tracking=0.14, dot=LIME,
-                  stroke_opacity=0.5, fill_opacity=0.7, shadow=False),
-        "</g>",
-        divider,
-    ]
-    x, maxw = 32, CARD_W - 64
-    title = "RADIATION MAXXING"
-    title_d = MONO_B.path(title, MONO_B.fit(title, maxw, 40), x, 404)
-    copy = "An idle game where you are the radiation. Irradiate unstable bits past critical and chain the cascade."
-    lines = MONO.wrap(copy, 16, maxw)
-    assert len(lines) <= 3, lines
-    body += [
-        text(MONO, "TITLE NO. 03 · IDLE GAME", 14, x, 360, LIME, tracking=0.2, opacity=0.75),
-        f'<path d="{title_d}" fill="{LIME}" fill-opacity=".45" filter="url(#soft)"/><path d="{title_d}" fill="{PALE}"/>',
-        text(MONO_B, "PUSH PAST CRITICAL", 15, x, 440, LIME, tracking=0.2),
-        *[text(MONO, line, 16, x, 482 + i * 26, PALE, opacity=0.75) for i, line in enumerate(lines)],
-        text(MONO_B, "SEE THE PROJECT →", 15, x, 562, LIME, tracking=0.06),
-        front,
-    ]
-    write("card-radiation.svg", svg(CARD_W, CARD_H, "Radiation Maxxing: push past critical. An idle game in development.", body, defs))
+def cards():
+    def icon_tag(x, y):
+        icon = data_uri(site_image("v2/game-icon.webp").resize((96, 96), Image.LANCZOS), fmt="WEBP", quality=90)
+        return f'<image href="{icon}" x="{x}" y="{y - 6}" width="44" height="44"/>', 44
 
-
-def card_rayban():
-    defs, body = [], []
-    back, front, divider = card_start(defs, PANEL)
-    pw, ph = 270, 300
-    cx, cy = 322, 26 + ph / 2
-    shot = cover(site_image("case/rayban/tour-institute.webp"), pw * 2, ph * 2, box=(0, 0, 1200, 1333))
-    defs.append(f'<clipPath id="screen"><rect x="{-pw / 2}" y="{-ph / 2}" width="{pw}" height="{ph}" rx="14"/></clipPath>')
-    stamp_w = MONO_B.width("FIELD-TESTED", 14, 0.16) + 66
-    body += [
-        back,
-        '<g clip-path="url(#art)">',
-        radial(defs, "ember", 300, 160, 460, EMBER, 0.3),
-        rays(300, 160, 700, GOLD, 0.04),
-        HALFTONE,
-        f'<g transform="translate({cx} {cy}) rotate(4)">'
-        f'<rect x="{-pw / 2 + 4}" y="{-ph / 2 + 6}" width="{pw + 12}" height="{ph + 12}" rx="20" fill="#000" fill-opacity=".7"/>'
-        f'<rect x="{-pw / 2 - 6}" y="{-ph / 2 - 6}" width="{pw + 12}" height="{ph + 12}" rx="20" fill="{INK}"/>'
-        f'<image href="{data_uri(shot, quality=84)}" x="{-pw / 2}" y="{-ph / 2}" width="{pw}" height="{ph}" '
-        'clip-path="url(#screen)" preserveAspectRatio="xMidYMid slice"/></g>',
-        f'<g transform="translate(488 78) rotate(-12)">'
-        f'<rect x="{num(-stamp_w / 2 + 4)}" y="-18" width="{num(stamp_w)}" height="44" fill="#000" fill-opacity=".6"/>'
-        f'<rect x="{num(-stamp_w / 2)}" y="-22" width="{num(stamp_w)}" height="44" fill="{OUTLINE}" stroke="{RED}" stroke-width="3"/>'
-        f'{text(MONO_B, "FIELD-TESTED", 14, -stamp_w / 2 + 16, MONO_B.cap * 14 / 2, RED, tracking=0.16)}'
-        f'{glyph("check", stamp_w / 2 - 40, -11, 22, RED, 3)}</g>',
-        label_box(24, 24, "SOLO · 2 WEEKS", ARCHIVO, 13, INK, BG, INK, stroke_opacity=0.5, fill_opacity=0.85, shadow=False),
-        "</g>",
-        divider,
-    ]
-    body += pulp_copy(
-        defs,
-        "CLIENT WORK · FIELD REPORT Nº 03",
-        "RAY-BAN CAMPUS TOUR",
-        "A hands-free audio tour on Ray-Ban Meta smart glasses. Look at a room, hear its story.",
-        "READ THE FIELD REPORT →",
-    )
-    body.append(front)
-    write("card-rayban.svg", svg(CARD_W, CARD_H, "Ray-Ban Campus Tour: a hands-free audio tour on Ray-Ban Meta smart glasses", body, defs))
+    card("survivors", "indigo", (0, 12, 0, 6), (0.85, 0.1),
+         art_survivors,
+         [icon_tag, lambda x, y: tag(x, y, "Live on Google Play", 15, RED, CREAM, dot=True)],
+         "BALL SURVIVORS",
+         "Pick a ball, outlast the crowd, and every few seconds pick something that makes it worse for them.",
+         ["2 arenas", "a boss every 5 min", "free on Android"],
+         ("See the game →", GOLD, INK),
+         "Ball Survivors: a survivor roguelike, live on Google Play")
+    card("ludo", "blue", (10, 0, 8, 0), (0.7, 0.5),
+         art_ludo,
+         [lambda x, y: tag(x, y, "Live on Google Play", 15, RED, CREAM, dot=True)],
+         "PLAY LUDO",
+         "Classic Ludo, except every capture is a 10-second duel. Eight mini-games, two boards, online or on one phone.",
+         ["8 duels", "2 boards", "published by MMA Studios"],
+         ("See the game →", GOLD, INK),
+         "Play Ludo: Ludo where every capture is a 10-second duel, live on Google Play", rot=1.5)
+    card("hatchmash", "red", (0, 8, 0, 14), (0.3, 0.3),
+         art_hatch,
+         [lambda x, y: tag(x, y, "RUN October Jam 2026", 15, INK, CREAM),
+          lambda x, y: tag(x, y, "Plays in browser", 15, GOLD, INK)],
+         "HATCH & MASH",
+         "Hatch a monster, slam a town, and watch it all fall down. Drag to stomp, let go to SLAM, and towers tip into towers.",
+         ["180 monsters", "let go to slam", "free"],
+         ("Play it free →", GOLD, INK),
+         "Hatch & Mash: hatch a monster, slam a town. A RUN October Jam 2026 game, free in your browser")
+    card("rayban", "teal", (12, 0, 10, 0), (0.6, 0.35),
+         art_rayban,
+         [lambda x, y: tag(x, y, "Client build · Shipped", 15, RED, CREAM)],
+         "RAY-BAN CAMPUS TOUR",
+         "A hands-free audio tour on Ray-Ban Meta smart glasses. Look at a room, hear its story. Beta SDK, no display, two weeks, delivered.",
+         ["solo build", "2 weeks", "beta SDK"],
+         ("Read the field report →", CREAM, INK),
+         "Ray-Ban Campus Tour: a hands-free audio tour on Ray-Ban Meta smart glasses", rot=1.5)
 
 
 # ── Jam cards ───────────────────────────────────────────────────────────────
 
-JAM_W, JAM_H, JAM_ART = 400, 530, 262
+JAM_W, JAM_H = 400, 560
 
 
-def jam_card(name, title, cover_rel, focus, place, awards, extra, label, badge_y=64):
-    defs, body = [], []
-    back, front = panel(defs, JAM_W, JAM_H)
-    defs.append(f'<clipPath id="art"><rect width="{JAM_W}" height="{JAM_ART}"/></clipPath>')
-    art = cover(site_image(cover_rel), 800, 524, focus=focus)
+def jam_card(name, title, cover_rel, focus, place, award, extra, label, rot, cut, badge=(322, 58)):
+    defs, body = fresh()
+    back, front = field(defs, JAM_W, JAM_H, "blue", cut=cut, at=(0.5, 0.3), dot=13)
+    x, y, w, h = 36, 34, 316, 214
+    art = data_uri(cover(site_image(cover_rel), w * 2, h * 2, focus=focus), quality=84)
+    first = place == "1ST"
     body += [
         back,
-        f'<g clip-path="url(#art)"><image href="{data_uri(art, quality=84)}" width="{JAM_W}" height="{JAM_ART}" preserveAspectRatio="xMidYMid slice"/></g>',
-        f'<rect y="{JAM_ART}" width="{JAM_W}" height="4" fill="{INK}"/>',
-        burst_badge(334, badge_y, 120, GOLD if place == "1ST" else INK, place),
+        frame(defs, x, y, w, h, rot, art, sw=5, drop=(8, 10)),
+        burst(badge[0], badge[1], 50, GOLD if first else CREAM, place, RED if first else BLUE, 28, rotate=8),
     ]
-    x, maxw = 28, JAM_W - 56
+    maxw = JAM_W - 80
     upper = title.upper()
-    body += [
-        text(MONO, "2025 · TEAM ENTRY", 13, x, 306, EMBER, tracking=0.2),
-        head(defs, ALFA, upper, ALFA.fit(upper, maxw, 34), x, 350),
-    ]
-    y = 390
-    for award in awards:
-        body.append(text(ARCHIVO, award, 17, x, y, GOLD, tracking=0.04))
-        y += 28
+    size = BLACK.fit(upper, maxw, 40)
+    body.append(letter(defs, upper, size, 40, 330))
+    body.append(shout(defs, XBOLD, award, 19, 42, 372, GOLD))
+    yy = 404
     if extra:
-        for line in MONO.wrap(extra, 13, maxw):
-            body.append(text(MONO, line, 13, x, y + 2, DIM))
-            y += 20
-    body += [text(ARCHIVO, "PLAY ON ITCH.IO →", 15, x, JAM_H - 38, GOLD, tracking=0.05), front]
+        for line in MED.wrap(extra, 16, maxw):
+            body.append(shout(defs, MED, line, 16, 42, yy, off=(1, 2), shadow_opacity=0.45))
+            yy += 23
+    markup, _ = slab(40, JAM_H - 104, "Play on itch.io →", 16, GOLD, INK)
+    body += [markup, front]
     write(f"jam-{name}.svg", svg(JAM_W, JAM_H, label, body, defs))
 
 
 def jams():
     jam_card("leftbroken", "Left Broken", "jams/leftbroken.png", (0.5, 0.78), "1ST",
-             ["1ST · IIIT DELHI JAM"], "also 2nd at IIT Ropar, as its earlier build 'Broken'",
-             "Left Broken: 1st at IIIT Delhi Jam, also 2nd at IIT Ropar")
+             "1ST · IIIT DELHI JAM", "Also 2nd at IIT Ropar, as its earlier build 'Broken'.",
+             "Left Broken: 1st at IIIT Delhi Jam, also 2nd at IIT Ropar", -2, (0, 10, 0, 6))
     jam_card("shadows", "Shadows of Bhangarh", "jams/shadows.jpg", (0.5, 0.35), "1ST",
-             ["1ST · IIT JODHPUR JAM"], "Prometeo 2025",
-             "Shadows of Bhangarh: 1st at IIT Jodhpur Jam, Prometeo 2025")
+             "1ST · IIT JODHPUR JAM", "Prometeo 2025.",
+             "Shadows of Bhangarh: 1st at IIT Jodhpur Jam, Prometeo 2025", 1.5, (8, 0, 10, 0))
     # The title is painted into the top of this cover, so its badge sits low, over the planet.
     jam_card("thirdlaw", "Third Law", "jams/thirdlaw.png", (0.5, 0.5), "2ND",
-             ["2ND · IIIT NAGPUR JAM"], None,
-             "Third Law: 2nd at IIIT Nagpur Jam", badge_y=212)
-
-
-# ── Toolbox ─────────────────────────────────────────────────────────────────
-
-
-def toolbox():
-    W = 1200
-    # Only tools Madhav has confirmed he uses (2026-09-13). Nothing aspirational.
-    columns = [
-        ("ENGINES", [("unity", "Unity"), ("unrealengine", "Unreal Engine"), ("android", "Android")]),
-        ("CODE", [("csharp", "C#"), ("python", "Python"), ("typescript", "TypeScript"), ("javascript", "JavaScript")]),
-        ("WEB & BACKEND", [("astro", "Astro"), ("cloudflare", "Cloudflare"), ("git", "Git")]),
-        ("CRAFT", [("blender", "Blender"), ("adobepremierepro", "Premiere Pro"), ("adobeaftereffects", "After Effects"),
-                   ("adobephotoshop", "Photoshop"), ("ffmpeg", "FFmpeg"), ("note", "FL Studio")]),
-    ]
-    pad, gap = 34, 20
-    colw = (W - 4 - pad * 2 - gap * 3) / 4
-    rows = max(len(tools) for _, tools in columns)
-    top, step, chip_h = 100, 54, 44
-    rule_y = top + (rows - 1) * step + chip_h + 34
-    H = rule_y + 84
-    defs, body = [], []
-    back, front = panel(defs, W, H, sw=3)
-    body += [back, HALFTONE]
-    for i, (heading, tools) in enumerate(columns):
-        x = 2 + pad + i * (colw + gap)
-        body.append(text(ARCHIVO, heading, 15, x, 62, EMBER, tracking=0.22))
-        body.append(f'<rect x="{num(x)}" y="76" width="{num(colw)}" height="2" fill="{INK}" fill-opacity=".14"/>')
-        for j, (slug, label) in enumerate(tools):
-            y = top + j * step
-            body += [
-                f'<rect x="{num(x)}" y="{y}" width="{num(colw)}" height="{chip_h}" rx="10" fill="{BG}" '
-                f'stroke="{INK}" stroke-opacity=".16" stroke-width="2"/>',
-                glyph(slug, x + 14, y + (chip_h - 22) / 2, 22, INK),
-                text(ARCHIVO_M, label, 18, x + 50, y + chip_h / 2 + ARCHIVO_M.cap * 18 / 2, INK),
-            ]
-    body.append(f'<rect x="{2 + pad}" y="{rule_y}" width="{num(W - 4 - pad * 2)}" height="2" fill="{INK}" fill-opacity=".12"/>')
-    lead, rest = "SPECIALTIES  ", "custom 2D physics · ECS/DOTS · Unity editor tooling · MCP automation"
-    lw, rw = MONO_B.width(lead, 15, 0.12), MONO.width(rest, 15)
-    sx, ty = (W - lw - rw) / 2, rule_y + 46
-    body += [text(MONO_B, lead, 15, sx, ty, GOLD, tracking=0.12), text(MONO, rest, 15, sx + lw, ty, DIM), front]
-    label = "Toolbox: " + ", ".join(name for _, tools in columns for _, name in tools)
-    write("toolbox.svg", svg(W, H, label, body, defs))
-
-
-# ── Footer ──────────────────────────────────────────────────────────────────
-
-
-def footer():
-    W = 1200
-    kicker = "FULL GAME BUILDS · PROTOTYPES & SLICES · MECHANICS & SYSTEMS · POLISH & GAME FEEL"
-    ksize = MONO.fit(kicker, W - 180, 14, 0.2)
-    size = ALFA.fit("SOMETHING", 720, 96)
-    y1 = 72 + 36 + ALFA.cap * size
-    y2 = y1 + size * 0.94
-    sub = OSWALD_R.wrap(
-        "Got a game, a prototype, or a half-finished build that needs a push? Tell us about it. "
-        "Based in India, working with clients everywhere.", 22, 760)
-    sy = y2 + 60
-    btn_label = "START A PROJECT →"
-    bw, bh = ARCHIVO.width(btn_label, 20, 0.04) + 64, 58
-    by = sy + (len(sub) - 1) * 32 + 36
-    mail_y = by + bh + 50
-    H = math.ceil(mail_y + 44)
-
-    defs, body = [], []
-    back, front = panel(defs, W, H, fill=BG, rx=26)
-    defs += [
-        f'<filter id="emberglow" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="0" stdDeviation="14" flood-color="{EMBER}" flood-opacity=".7"/></filter>',
-        f'<filter id="tealglow" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="0" stdDeviation="14" flood-color="{TEAL}" flood-opacity=".6"/></filter>',
-    ]
-    saw = data_uri(site_image("renders/RIPSAW.png").resize((300, 300), Image.LANCZOS), fmt="WEBP", quality=90)
-    shredder = data_uri(site_image("renders/SHREDDER.png").resize((260, 260), Image.LANCZOS), fmt="WEBP", quality=90)
-    mail_lead, mail = "or email  ", "kindamad.hav@gmail.com"
-    ml, mw = MONO.width(mail_lead, 16), MONO_B.width(mail, 16)
-    mx = (W - ml - mw) / 2
-    body += [
-        back,
-        radial(defs, "ember", 600, y1, 700, EMBER, 0.28, cls="glow"),
-        rays(600, (y1 + y2) / 2, 1100, GOLD, 0.04),
-        HALFTONE,
-        f'<rect width="{W}" height="10" fill="url(#bar)"/>',
-        f'<g transform="translate(58 {num(H * 0.2)})"><g class="spin s8"><image href="{saw}" width="150" height="150" filter="url(#emberglow)"/></g></g>',
-        f'<g transform="translate(1000 {num(H * 0.52)})"><g class="spin s11 rev"><image href="{shredder}" width="130" height="130" filter="url(#tealglow)"/></g></g>',
-        text(MONO, kicker, ksize, W / 2, 72, EMBER, anchor="middle", tracking=0.2),
-        mast(defs, ALFA, "LET’S BUILD", size, W / 2, y1, anchor="middle"),
-        mast(defs, ALFA, "SOMETHING", size, W / 2, y2, anchor="middle", face=RED, mid=EMBER, low=DRED),
-        *[text(OSWALD_R, line, 22, W / 2, sy + i * 32, INK, anchor="middle", opacity=0.85) for i, line in enumerate(sub)],
-        f'<rect x="{num((W - bw) / 2 + 5)}" y="{num(by + 5)}" width="{num(bw)}" height="{bh}" fill="#000" fill-opacity=".6"/>',
-        f'<rect x="{num((W - bw) / 2)}" y="{num(by)}" width="{num(bw)}" height="{bh}" fill="{RED}" stroke="{INK}" stroke-width="3"/>',
-        text(ARCHIVO, btn_label, 20, W / 2, by + bh / 2 + ARCHIVO.cap * 20 / 2, "#fff", anchor="middle", tracking=0.04),
-        text(MONO, mail_lead, 16, mx, mail_y, DIM),
-        text(MONO_B, mail, 16, mx + ml, mail_y, GOLD),
-        front,
-    ]
-    write("footer.svg", svg(W, H, "Let's build something. Full game builds, prototypes and slices, mechanics and systems, polish and game feel.", body, defs))
-
-
-# ── Right-now board ─────────────────────────────────────────────────────────
-
-
-def rgb(hex_color):
-    return tuple(int(hex_color[i:i + 2], 16) for i in (1, 3, 5))
-
-
-def tint(im, color):
-    """Recolor a white weapon silhouette, keeping its alpha."""
-    solid = Image.new("RGBA", im.size, rgb(color) + (255,))
-    solid.putalpha(im.getchannel("A"))
-    return solid
-
-
-def status_board():
-    """What's on the bench, with brand art as the markers instead of emoji."""
-    W = 1200
-    pad, gap, top, col_h = 28, 20, 84, 262
-    colw = (W - 3 - pad * 2 - gap * 2) / 3
-    H = top + col_h + 30 + 8
-    defs, body = [], []
-    back, front = panel(defs, W, H, sw=3)
-    die = data_uri(site_image("ludo/el/dice-6.webp").convert("RGBA").resize((128, 128), Image.LANCZOS), fmt="WEBP", quality=90)
-    hammer = site_image("renders/BONKER.png").resize((170, 170), Image.LANCZOS)
-    hammer_face = data_uri(tint(hammer, GOLD), fmt="WEBP", quality=90)
-    hammer_drop = data_uri(tint(hammer, DRED), fmt="WEBP", quality=90)
-    rows = [
-        ("SHIPPING", EMBER, "KINDAMADBALLS",
-         "A survivor roguelike. The free playtest is open on Android."),
-        ("BUILDING", LUDO_SKY, "PLAY LUDO",
-         "Ludo where every capture is a 10-second duel. Coming soon on Google Play."),
-        ("TINKERING", GOLD, "THE WORKSHOP",
-         "Custom 2D physics, Unity editor tooling, and MCP pipelines for Unity, Unreal, Blender and FL Studio."),
-    ]
-    body += [back, HALFTONE, label_box(26, 22, "RIGHT NOW", ARCHIVO, 16, OUTLINE, GOLD, INK, rotate=-2)]
-    for i, (kicker, accent, title, copy) in enumerate(rows):
-        x = 1.5 + pad + i * (colw + gap)
-        mx, my, mr = x + 64, top + 66, 42
-        body += [
-            f'<rect x="{num(x)}" y="{top}" width="{num(colw)}" height="{col_h}" rx="14" fill="{BG}" '
-            f'stroke="{INK}" stroke-opacity=".16" stroke-width="2"/>',
-            f'<rect x="{num(x)}" y="{top + 18}" width="4" height="{col_h - 36}" fill="{accent}"/>',
-        ]
-        if kicker == "BUILDING":
-            # Play Ludo's die on the game's burst sky.
-            defs.append(
-                f'<radialGradient id="ludosky" cx="{num(mx)}" cy="{my}" r="{mr}" gradientUnits="userSpaceOnUse">'
-                '<stop offset="0" stop-color="#19A9F2"/><stop offset=".6" stop-color="#0875E8"/><stop offset="1" stop-color="#073B91"/></radialGradient>'
-            )
-            body.append(
-                f'<circle class="glow" cx="{num(mx)}" cy="{my}" r="{mr + 14}" fill="{LUDO_SKY}" fill-opacity=".18"/>'
-                f'<circle cx="{num(mx)}" cy="{my}" r="{mr}" fill="url(#ludosky)" stroke="#fff" stroke-opacity=".6" stroke-width="3"/>'
-                f'<g class="wobble"><image href="{die}" x="{num(mx - 30)}" y="{my - 32}" width="60" height="60"/></g>'
-            )
-        else:
-            glow = TEAL if kicker == "SHIPPING" else accent
-            defs.append(
-                f'<radialGradient id="halo{i}" cx="{num(mx)}" cy="{my}" r="{mr + 22}" gradientUnits="userSpaceOnUse">'
-                f'<stop offset=".45" stop-color="{glow}" stop-opacity=".45"/><stop offset="1" stop-color="{glow}" stop-opacity="0"/></radialGradient>'
-            )
-            body.append(f'<circle class="glow" cx="{num(mx)}" cy="{my}" r="{mr + 22}" fill="url(#halo{i})"/>')
-            if kicker == "SHIPPING":
-                # The new KindaMADballs app icon, the tile the Play listing and the site show.
-                body.append(game_icon(defs, mx - 44, my - 46, 88))
-            else:
-                body.append(
-                    f'<circle cx="{num(mx)}" cy="{my}" r="{mr}" fill="#000" fill-opacity=".45" stroke="{accent}" stroke-opacity=".5" stroke-width="2"/>'
-                    f'<g class="wobble"><image href="{hammer_drop}" x="{num(mx - 37)}" y="{my - 36}" width="80" height="80"/>'
-                    f'<image href="{hammer_face}" x="{num(mx - 40)}" y="{my - 40}" width="80" height="80"/></g>'
-                )
-        dot = ' class="pulse"' if kicker == "SHIPPING" else ""
-        body += [
-            f'<circle{dot} cx="{num(x + 126)}" cy="{my}" r="5" fill="{accent}"/>',
-            text(MONO_B, kicker, 14, x + 140, my + MONO_B.cap * 14 / 2, accent, tracking=0.22),
-        ]
-        tx, ty, maxw = x + 24, top + 150, colw - 48
-        body.append(mast(defs, ALFA, title, ALFA.fit(title, maxw, 34), tx, ty))
-        lines = OSWALD_R.wrap(copy, 20, maxw)
-        assert len(lines) <= 3, lines
-        body += [text(OSWALD_R, line, 20, tx, top + 190 + j * 27, INK, opacity=0.82) for j, line in enumerate(lines)]
-    body.append(front)
-    label = "Right now. " + " ".join(f"{k.title()}: {t.title()}. {c}" for k, _, t, c in rows)
-    write("now.svg", svg(W, H, label, body, defs, css=GAME_ICON_CSS))
+             "2ND · IIIT NAGPUR JAM", None,
+             "Third Law: 2nd at IIIT Nagpur Jam", -1, (0, 6, 0, 12), badge=(318, 214))
 
 
 # ── Building in public ──────────────────────────────────────────────────────
 
 GITHUB_USER = "KindaMAD-hav"
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-# GitHub's five contribution levels, recolored from green to the pulp ember ramp.
-HEAT = ["#231b17", "#5b2a14", "#a3441b", EMBER, GOLD]
+# GitHub's five contribution levels, in the greens the site's About page uses on cream.
+HEAT = ["#d8cfb4", "#6fb479", "#4f9b5e", "#3a8049", "#29612f"]
+LABEL = "#6b5a3a"
 
 
 def fetch_contributions(user):
@@ -1041,6 +917,7 @@ def pretty(date):
 
 
 def contributions():
+    """The About page's 'Building in public': a taped cream clipping of the last year on gold."""
     total, days = fetch_contributions(GITHUB_USER)
     active = sum(1 for d in days if d["count"])
     longest = run = 0
@@ -1050,31 +927,42 @@ def contributions():
     best = max(days, key=lambda d: d["count"])
     latest = days[-1]["date"]
 
-    W, H = 1200, 452
-    defs, body = [], []
-    back, front = panel(defs, W, H, sw=3)
-    body += [back, HALFTONE]
+    W, H = 1200, 712
+    defs, body = fresh()
+    back, front = field(defs, W, H, "gold", cut=(0, 16, 0, 10), at=(0.15, 0.1))
+    body += [
+        back,
+        section_title(defs, "BUILDING IN PUBLIC", "Most of the work ships in the open. This is the last year of commits, straight off GitHub.",
+                      50, 136, 100, 700, W, note_fill=INK, note_shadow=False, top=INK, bot=INK2, line=GOLD, shadow=RED),
+    ]
 
+    cx0, cy0, cw, ch = 50, 196, W - 120, 452
+    clip = [
+        f'<rect x="{cx0 + 10}" y="{cy0 + 12}" width="{cw}" height="{ch}" fill="{INK}"/>',
+        f'<rect x="{cx0}" y="{cy0}" width="{cw}" height="{ch}" fill="{CREAM}" stroke="{INK}" stroke-width="4"/>',
+        text(XBOLD, "@KINDAMAD-HAV", 18, cx0 + 30, cy0 + 42, INK),
+        text(XBOLD, "LAST 12 MONTHS", 16, cx0 + cw - 30, cy0 + 42, INK, anchor="end"),
+    ]
     items = [
         (f"{total:,}", "CONTRIBUTIONS", "in the last year"),
         (str(active), "ACTIVE DAYS", f"out of {len(days)}"),
         (str(longest), "LONGEST STREAK", "days in a row"),
         (str(best["count"]), "BEST DAY", pretty(best["date"])),
     ]
-    col = (W - 3) / 4
+    col = cw / 4
     for i, (n, label, sub) in enumerate(items):
-        cx = 1.5 + col * (i + 0.5)
-        body += [
-            mast(defs, ALFA, n, 54, cx, 92, anchor="middle"),
-            text(ARCHIVO, label, 16, cx, 128, INK, anchor="middle", tracking=0.08),
-            text(MONO, sub, 14, cx, 154, DIM, anchor="middle"),
+        cx = cx0 + col * (i + 0.5)
+        clip += [
+            shout(defs, BLACK, n, 50, cx, cy0 + 112, INK, RED, off=(3, 4), anchor="middle"),
+            text(BOLD, label, 15, cx, cy0 + 142, INK, anchor="middle", tracking=0.06),
+            text(MED, sub, 14, cx, cy0 + 164, LABEL, anchor="middle"),
         ]
-        if i:
-            x = num(1.5 + col * i)
-            body.append(f'<line x1="{x}" y1="40" x2="{x}" y2="160" stroke="{INK}" stroke-opacity=".14" stroke-width="2" stroke-dasharray="3 7"/>')
-    body.append(f'<rect x="40" y="184" width="{W - 80}" height="2" fill="{INK}" fill-opacity=".12"/>')
+    clip.append(f'<rect x="{cx0 + 30}" y="{cy0 + 190}" width="{cw - 60}" height="3" fill="{INK}" fill-opacity=".12"/>')
 
-    x0, y0, pitch, cell = 90, 236, 20, 16
+    pitch, cell = 19, 15
+    ncols = max(d["col"] for d in days) + 1
+    x0 = cx0 + (cw - ncols * pitch) / 2 + 16
+    y0 = cy0 + 238
     columns = {}
     for d in days:
         columns.setdefault(d["col"], []).append(d)
@@ -1083,32 +971,126 @@ def contributions():
         month = int(min(d["date"] for d in columns[c])[5:7])
         x = x0 + c * pitch
         if month != prev and x - last_x >= pitch * 3:
-            body.append(text(MONO, MONTHS[month - 1].upper(), 13, x, y0 - 14, DIM, tracking=0.08))
+            clip.append(text(SEMI, MONTHS[month - 1], 15, x, y0 - 12, LABEL))
             last_x = x
         prev = month
-    for row, name in ((1, "MON"), (3, "WED"), (5, "FRI")):
-        body.append(text(MONO, name, 12, x0 - 12, y0 + row * pitch + cell / 2 + MONO.cap * 12 / 2, DIM, anchor="end"))
+    for row, name in ((1, "Mon"), (3, "Wed"), (5, "Fri")):
+        clip.append(text(SEMI, name, 14, x0 - 10, y0 + row * pitch + cell / 2 + SEMI.cap * 14 / 2, LABEL, anchor="end"))
     for d in days:
-        ring = f' stroke="{INK}" stroke-width="2"' if d is best else ""
-        body.append(
-            f'<rect x="{x0 + d["col"] * pitch}" y="{y0 + d["row"] * pitch}" width="{cell}" height="{cell}" '
-            f'rx="3" fill="{HEAT[d["level"]]}"{ring}/>'
+        ring = f' stroke="{INK}" stroke-width="2.5"' if d is best else ""
+        clip.append(
+            f'<rect x="{num(x0 + d["col"] * pitch)}" y="{num(y0 + d["row"] * pitch)}" width="{cell}" height="{cell}" '
+            f'rx="2" fill="{HEAT[d["level"]]}"{ring}/>'
         )
-
-    ly = 414
-    body.append(text(MONO, f"includes private work · data through {pretty(latest)}", 13, x0, ly, DIM))
-    more_x = W - 54 - MONO.width("MORE", 12, 0.08)
-    body.append(text(MONO, "MORE", 12, more_x, ly, DIM, tracking=0.08))
-    swatch_x = more_x - 10 - (len(HEAT) * 18 - 4)
+    ly = y0 + 7 * pitch + 34
+    clip.append(text(MED, f"Includes private work · data through {pretty(latest)}", 14, x0, ly, LABEL))
+    more_x = x0 + ncols * pitch - 4 - SEMI.width("More", 14)
+    clip.append(text(SEMI, "More", 14, more_x, ly, LABEL))
+    swatch_x = more_x - 10 - (len(HEAT) * 19 - 4)
     for i, color in enumerate(HEAT):
-        body.append(f'<rect x="{num(swatch_x + i * 18)}" y="{ly - 12}" width="14" height="14" rx="3" fill="{color}"/>')
-    body.append(text(MONO, "LESS", 12, swatch_x - 10, ly, DIM, anchor="end", tracking=0.08))
-    body.append(front)
+        clip.append(f'<rect x="{num(swatch_x + i * 19)}" y="{num(ly - 13)}" width="15" height="15" rx="2" fill="{color}"/>')
+    clip.append(text(SEMI, "Less", 14, swatch_x - 10, ly, LABEL, anchor="end"))
+    # The strip of tape holding the clipping down.
+    tape = (f'<g transform="rotate(-4 {num(cx0 + cw * 0.46 + 64)} {cy0})">'
+            f'<rect x="{num(cx0 + cw * 0.46)}" y="{cy0 - 18}" width="128" height="34" fill="{CREAM}" fill-opacity=".82" '
+            f'stroke="{INK}" stroke-opacity=".2" stroke-width="2"/></g>')
+    body += [f'<g transform="rotate(-.6 {num(cx0 + cw / 2)} {num(cy0 + ch / 2)})">{"".join(clip)}{tape}</g>', front]
 
-    label = (f"{total:,} GitHub contributions in the last year, {active} active days, "
+    label = (f"Building in public: {total:,} GitHub contributions in the last year, {active} active days, "
              f"longest streak {longest} days, best day {best['count']} on {pretty(best['date'])}")
     write("contributions.svg", svg(W, H, label, body, defs))
     print(f"  contributions: {total:,} total, {active} active days, streak {longest}, best {best['count']} ({best['date']}), through {latest}")
+
+
+# ── Toolbox ─────────────────────────────────────────────────────────────────
+
+
+def toolbox():
+    W = 1200
+    # Only tools Madhav has confirmed he uses (2026-09-13). Nothing aspirational.
+    columns = [
+        ("Engines", [("unity", "Unity"), ("unrealengine", "Unreal Engine"), ("android", "Android")]),
+        ("Code", [("csharp", "C#"), ("python", "Python"), ("typescript", "TypeScript"), ("javascript", "JavaScript")]),
+        ("Web & backend", [("astro", "Astro"), ("cloudflare", "Cloudflare"), ("git", "Git")]),
+        ("Craft", [("blender", "Blender"), ("adobepremierepro", "Premiere Pro"), ("adobeaftereffects", "After Effects"),
+                   ("adobephotoshop", "Photoshop"), ("ffmpeg", "FFmpeg"), ("note", "FL Studio")]),
+    ]
+    pad, gap = 50, 22
+    colw = (W - 8 - pad * 2 - gap * 3) / 4
+    rows = max(len(tools) for _, tools in columns)
+    top, step, chip_h = 232, 58, 44
+    spec_y = top + (rows - 1) * step + chip_h + 50
+    H = spec_y + 72
+    defs, body = fresh()
+    back, front = field(defs, W, H, "teal", cut=(12, 0, 16, 0), at=(0.85, 0.15))
+    body += [back, section_title(defs, "THE TOOLBOX", "Engines, code and craft. Only what I actually use.", pad, 138, 104, 700, W)]
+    for i, (heading, tools) in enumerate(columns):
+        x = pad + i * (colw + gap)
+        markup, _ = tag(x, 172, heading, 16, INK, GOLD)
+        body.append(markup)
+        for j, (slug, label) in enumerate(tools):
+            y = top + j * step
+            rot = (-0.8, 0.6, -0.4, 0.8)[(i + j) % 4]
+            body.append(
+                f'<g transform="rotate({rot} {num(x + colw / 2)} {num(y + chip_h / 2)})">'
+                f'<rect x="{num(x + 4)}" y="{y + 5}" width="{num(colw)}" height="{chip_h}" fill="{INK}"/>'
+                f'<rect x="{num(x)}" y="{y}" width="{num(colw)}" height="{chip_h}" fill="{CREAM}" stroke="{INK}" stroke-width="3"/>'
+                f'{glyph(slug, x + 14, y + (chip_h - 22) / 2, 22, INK)}'
+                f'{text(SEMI, label, 19, x + 48, y + chip_h / 2 + SEMI.cap * 19 / 2, INK)}</g>'
+            )
+    spec, sw_ = tag(pad, spec_y, "Specialties", 16, GOLD, INK)
+    body += [
+        spec,
+        shout(defs, XBOLD, "CUSTOM 2D PHYSICS · ECS/DOTS · UNITY EDITOR TOOLING · MCP AUTOMATION", 19,
+              pad + sw_ + 16, spec_y + 16 + XBOLD.cap * 19 / 2 + 1),
+        front,
+    ]
+    label = "The toolbox: " + ", ".join(name for _, tools in columns for _, name in tools)
+    write("toolbox.svg", svg(W, H, label, body, defs))
+
+
+# ── Footer ──────────────────────────────────────────────────────────────────
+
+
+def footer():
+    W, H = 1200, 560 if not CONTACT else 600
+    defs, body = fresh()
+    back, front = field(defs, W, H, "red", cut=(0, 16, 0, 0), at=(0.5, 0.5))
+    services = ["full game builds", "prototypes & slices", "mechanics & systems", "polish & game feel"]
+    size = BLACK.fit("SOMETHING", 700, 118)
+    y1 = 142 + BLACK.cap * size
+    y2 = y1 + size * 0.9
+    saw = site_image("v2/heroes/ripsaw.webp").resize((242, 250), Image.LANCZOS)
+    rpg = fit_width(site_image("v2/heroes/rpg.webp"), 320)
+    body += [
+        back,
+        f'<g class="spin"><image href="{data_uri(saw, fmt="WEBP", quality=88)}" x="30" y="236" width="200" height="207" filter="url(#popdrop)"/></g>',
+        pop(data_uri(rpg, fmt="WEBP", quality=88), 980, 60, 180, 180 * rpg.height / rpg.width, delay="-1.4s"),
+    ]
+    widths = [chip(0, 0, s, 16)[1] for s in services]
+    total = sum(widths) + 14 * (len(widths) - 1)
+    markup, _ = chips((W - total) / 2, 56, services, 16, 14)
+    body += [
+        markup,
+        letter(defs, "LET’S BUILD", size, W / 2, y1, anchor="middle"),
+        letter(defs, "SOMETHING", size, W / 2, y2, anchor="middle"),
+    ]
+    sub = MED.wrap("Got a game, a prototype, or a half-finished build that needs a push? Tell us about it. "
+                   "Based in India, working with clients everywhere.", 22, 700)
+    sy = y2 + 58
+    body += [shout(defs, MED, line, 22, W / 2, sy + i * 30, anchor="middle", off=(1, 2), shadow_opacity=0.45) for i, line in enumerate(sub)]
+    by = sy + (len(sub) - 1) * 30 + 30
+    label_cta = "Start a project →"
+    _, (bw, _) = slab(0, 0, label_cta, 22, GOLD, INK)
+    markup, (bw, bh) = slab((W - bw) / 2, by, label_cta, 22, GOLD, INK)
+    body.append(markup)
+    if CONTACT:
+        lead = "or email "
+        ml, mw = MED.width(lead, 19), XBOLD.width(CONTACT, 19)
+        mx, my = (W - ml - mw) / 2, by + bh + 42
+        body += [shout(defs, MED, lead, 19, mx, my, off=(1, 2), shadow_opacity=0.45), shout(defs, XBOLD, CONTACT, 19, mx + ml, my, GOLD)]
+    body.append(front)
+    write("footer.svg", svg(W, H, "Let's build something. Full game builds, prototypes and slices, mechanics and systems, polish and game feel.", body, defs))
 
 
 def main(args):
@@ -1121,18 +1103,15 @@ def main(args):
     print("Building profile art into assets/")
     hero()
     buttons()
-    status_board()
+    now()
     stats()
-    section("public", "BUILDING IN PUBLIC", "@KINDAMAD-HAV ON GITHUB", "Building in public")
-    contributions()
-    section("making", "WHAT I’M MAKING", "NOW SHOWING", "What I'm making")
-    section("jams", "BEFORE THE STUDIO, THE JAMS", "2025 · TWO 1STS · TWO 2NDS", "Before the studio, the jams")
-    section("toolbox", "THE TOOLBOX", "ENGINES · CODE · CRAFT", "The toolbox")
-    card_balls()
-    card_ludo()
-    card_radiation()
-    card_rayban()
+    head("making", "indigo", "THE LINEUP", "Two games live on Google Play, one jam game you can play in a browser, and one client build.",
+         "The lineup", (0, 14, 0, 0), (0.85, 0.2))
+    cards()
+    head("jams", "blue", "BEFORE THE STUDIO, THE JAMS", "Four podiums in 2025. Two 1sts, two 2nds, all team efforts.",
+         "Before the studio, the jams", (14, 0, 0, 0), (0.15, 0.3))
     jams()
+    contributions()
     toolbox()
     footer()
 
