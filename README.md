@@ -37,9 +37,8 @@ Every one of these was a team effort, made with some of my closest friends, and 
 Source: <a href="https://github.com/KindaMAD-hav/Shadow-of-Bhangarh">Shadows of Bhangarh</a> · <a href="https://github.com/KindaMAD-hav/WeightlessBond">Third Law</a> · <a href="https://github.com/KindaMAD-hav/bRoKeN_SleepDeprived_Advitya25">Broken</a> · <a href="https://github.com/KindaMAD-hav/TimeBound">TimeBound</a> (GMTK 2025)
 </sub></p>
 
-<img src="assets/contributions.svg" width="100%" alt="Building in public: GitHub contribution heatmap for the last year, with total contributions, active days, longest streak and best day.">
+<img src="assets/contributions.svg" width="100%" alt="Building in public: GitHub contribution heatmap for the last year, with total contributions, active days, longest streak and best day. The toolbox. Engines: Unity, Unreal Engine, Android. Code: C#, Python, TypeScript, JavaScript. Web and backend: Astro, Cloudflare, Git. Craft: Blender, Premiere Pro, After Effects, Photoshop, FFmpeg, FL Studio. Specialties: custom 2D physics, ECS/DOTS, Unity editor tooling, MCP automation.">
 
-<img src="assets/toolbox.svg" width="100%" alt="The toolbox. Engines: Unity, Unreal Engine, Android. Code: C#, Python, TypeScript, JavaScript. Web and backend: Astro, Cloudflare, Git. Craft: Blender, Premiere Pro, After Effects, Photoshop, FFmpeg, FL Studio. Specialties: custom 2D physics, ECS/DOTS, Unity editor tooling, MCP automation.">
 
 <a href="https://kindamad.com/work#inquiry"><img src="assets/footer.svg" width="100%" alt="Let's build something. Full game builds, prototypes and slices, mechanics and systems, polish and game feel. Start a project."></a>
 

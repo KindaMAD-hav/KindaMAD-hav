@@ -1020,7 +1020,7 @@ def contributions():
 
     W, H = 1200, 712
     defs, body = fresh()
-    back, front = field(defs, W, H, "gold", cut=(0, 16, 0, 10), at=(0.15, 0.1))
+    back, front = bleed(defs, W, H, "gold", at=(0.15, 0.1))
     body += [
         back,
         section_title(defs, "BUILDING IN PUBLIC", "Most of the work ships in the open. This is the last year of commits, straight off GitHub.",
@@ -1095,16 +1095,20 @@ def contributions():
     tilt = f'rotate(-.6 {num(cx0 + cw / 2)} {num(cy0 + ch / 2)})'
     body += [f'<g transform="{tilt}">{paper}</g>', "".join(clip), f'<g transform="{tilt}">{tape}</g>', front]
 
+    # The toolbox rides in the same image (the daily job rebuilds both): no gap between them.
+    th, tbody, tlabel = toolbox_section(defs)
+    h, body = stack([("gold", H, body), ("teal", th, tbody)])
     label = (f"Building in public: {total:,} GitHub contributions in the last year, {active} active days, "
-             f"longest streak {longest} days, best day {best['count']} on {pretty(best['date'])}")
-    write("contributions.svg", svg(W, H, label, body, defs))
+             f"longest streak {longest} days, best day {best['count']} on {pretty(best['date'])}. {tlabel}")
+    write("contributions.svg", svg(W, num(h), label, body, defs))
     print(f"  contributions: {total:,} total, {active} active days, streak {longest}, best {best['count']} ({best['date']}), through {latest}")
 
 
 # ── Toolbox ─────────────────────────────────────────────────────────────────
 
 
-def toolbox():
+def toolbox_section(defs):
+    """The toolbox, drawn under 'Building in public' in contributions.svg. Returns (h, body, label)."""
     W = 1200
     # Only tools Madhav has confirmed he uses (2026-09-13). Nothing aspirational.
     columns = [
@@ -1120,8 +1124,8 @@ def toolbox():
     top, step, chip_h = 232, 58, 44
     spec_y = top + (rows - 1) * step + chip_h + 50
     H = spec_y + 72
-    defs, body = fresh()
-    back, front = field(defs, W, H, "teal", cut=(12, 0, 16, 0), at=(0.85, 0.15))
+    body = []
+    back, front = bleed(defs, W, H, "teal", at=(0.85, 0.15))
     body += [back, section_title(defs, "THE TOOLBOX", "Engines, code and craft. Only what I actually use.", pad, 138, 104, 700, W)]
     for i, (heading, tools) in enumerate(columns):
         x = pad + i * (colw + gap)
@@ -1145,7 +1149,7 @@ def toolbox():
         front,
     ]
     label = "The toolbox: " + ", ".join(name for _, tools in columns for _, name in tools)
-    write("toolbox.svg", svg(W, H, label, body, defs))
+    return H, body, label
 
 
 # ── Footer ──────────────────────────────────────────────────────────────────
@@ -1208,7 +1212,6 @@ def main(args):
          "Before the studio, the jams", (14, 0, 0, 0), (0.15, 0.3))
     jams()
     contributions()
-    toolbox()
     footer()
 
 
