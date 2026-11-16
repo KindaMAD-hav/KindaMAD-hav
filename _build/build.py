@@ -920,11 +920,25 @@ def pretty(date):
     return f"{d} {MONTHS[m - 1]} {y}"
 
 
-def contributions(digits=None, paper_only_tilt=True):
+def big_number(defs, n, cx, y, size=62, top=ORANGE, bot=RED, weight=4):
+    """A stat on the cream clipping in the hero's GANGNEJA lettering: orange over red,
+    ink outline, hard ink shadow. (Ink on a red shadow read as a smudge on the gold
+    section.) ExtraBold with tracking, not Black, so 6, 8 and 0 keep their counters."""
+    ident, gid = uid(), uid("g")
+    cap = XBOLD.cap * size
+    defs.append(f'<path id="{ident}" d="{XBOLD.path(n, size, cx, y, "middle", 0.04)}"/>')
+    defs.append(
+        f'<linearGradient id="{gid}" gradientUnits="userSpaceOnUse" x1="0" y1="{num(y - cap)}" x2="0" y2="{num(y)}">'
+        f'<stop offset=".5" stop-color="{top}"/><stop offset=".5" stop-color="{bot}"/></linearGradient>'
+    )
+    st = f'stroke-width="{weight}" stroke-linejoin="round"'
+    dx, dy = num(weight * 0.5 + 1.5), num(weight * 0.643 + 2)
+    return (f'<use href="#{ident}" x="{dx}" y="{dy}" fill="{INK}" stroke="{INK}" {st}/>'
+            f'<use href="#{ident}" fill="{INK}" stroke="{INK}" {st}/><use href="#{ident}" fill="url(#{gid})"/>')
+
+
+def contributions():
     """The About page's 'Building in public': a taped cream clipping of the last year on gold."""
-    # Big numbers: ExtraBold with a little tracking keeps the counters of 6, 8 and 0
-    # open at ~38px on screen; Black closed them up under the red shadow.
-    font, track, off = digits or (XBOLD, 0.03, (3, 4))
     total, days = fetch_contributions(GITHUB_USER)
     active = sum(1 for d in days if d["count"])
     longest = run = 0
@@ -964,7 +978,7 @@ def contributions(digits=None, paper_only_tilt=True):
     for i, (n, label, sub) in enumerate(items):
         cx = cx0 + col * (i + 0.5)
         clip += [
-            shout(defs, font, n, 62, cx, cy0 + 122, INK, RED, off=off, anchor="middle", tracking=track),
+            big_number(defs, n, cx, cy0 + 122),
             text(BOLD, label, 21, cx, cy0 + 156, INK, anchor="middle", tracking=0.05),
             text(SEMI, sub, 20, cx, cy0 + 184, LABEL, anchor="middle"),
         ]
@@ -1009,10 +1023,7 @@ def contributions(digits=None, paper_only_tilt=True):
     # Only the paper sits crooked. Text turned even half a degree never lines up with
     # the pixel grid, and at 1x it reads soft; upright, every stroke lands crisp.
     tilt = f'rotate(-.6 {num(cx0 + cw / 2)} {num(cy0 + ch / 2)})'
-    if paper_only_tilt:
-        body += [f'<g transform="{tilt}">{paper}</g>', "".join(clip), f'<g transform="{tilt}">{tape}</g>', front]
-    else:
-        body += [f'<g transform="{tilt}">{paper}{"".join(clip)}{tape}</g>', front]
+    body += [f'<g transform="{tilt}">{paper}</g>', "".join(clip), f'<g transform="{tilt}">{tape}</g>', front]
 
     label = (f"Building in public: {total:,} GitHub contributions in the last year, {active} active days, "
              f"longest streak {longest} days, best day {best['count']} on {pretty(best['date'])}")
