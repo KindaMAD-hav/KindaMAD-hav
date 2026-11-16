@@ -1,4 +1,4 @@
-# Daily refresh of assets/contributions.svg (the "Building in public" heatmap).
+# Daily refresh of assets/contributions.svg (the "Building in public" heatmap, with the toolbox under it).
 # Commits only when the data changed: the build is byte-identical otherwise.
 name: Refresh contribution heatmap
 

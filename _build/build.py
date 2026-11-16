@@ -12,7 +12,7 @@ looks the same on every machine and leans on no third-party service.
 
     pip install fonttools pillow
     python _build/build.py                  # everything
-    python _build/build.py contributions    # only the contribution heatmap (the daily refresh)
+    python _build/build.py contributions    # only contributions.svg: the heatmap and the toolbox under it (the daily refresh)
 
 Art comes from the KindaMAD Studios site. For a full build, point KINDAMAD_SITE at a local
 checkout of it; without one the script fetches kindamad.com, whose CDN may throttle it.
@@ -30,7 +30,6 @@ import os
 import re
 import sys
 import urllib.request
-from functools import lru_cache
 
 from fontTools.pens.svgPathPen import SVGPathPen
 from fontTools.pens.transformPen import TransformPen
@@ -277,10 +276,6 @@ def data_uri(im, fmt="JPEG", quality=84):
     return f"data:{mime};base64,{base64.b64encode(buf.getvalue()).decode()}"
 
 
-def rgb(hex_color):
-    return tuple(int(hex_color[i:i + 2], 16) for i in (1, 3, 5))
-
-
 def icon_path(slug):
     with open(os.path.join(ICON_DIR, f"{slug}.svg"), encoding="utf-8") as f:
         return re.search(r'<path d="([^"]+)"', f.read()).group(1)
@@ -484,7 +479,7 @@ def rays_and_dots(defs, w, h, kind, at, dot):
 
 
 def field(defs, w, h, kind, cut=(0, 14, 0, 14), at=(0.5, 0.4), dot=16, drop=8, sw=5):
-    """One comic panel per image: a colour field with slanted, hand-cut edges, an ink
+    """A comic panel: a colour field with slanted, hand-cut edges, an ink
     border and a hard ink drop. Content goes between back and front."""
     base = FIELDS[kind][0]
     tl, tr, br, bl = cut
@@ -915,12 +910,17 @@ def cards():
 JAM_W, JAM_H = 400, 560
 
 
-def jam_card(name, title, cover_rel, focus, place, award, extra, label, rot, cut, badge=(322, 58)):
+def jam_card(name, title, cover_rel, focus, place, award, extra, label, rot, cut, badge=(322, 76)):
     defs, body = fresh()
     back, front = field(defs, JAM_W, JAM_H, "blue", cut=cut, at=(0.5, 0.3), dot=13)
     x, y, w, h = 36, 34, 316, 214
     art = data_uri(cover(site_image(cover_rel), w * 2, h * 2, focus=focus), quality=84)
     first = place == "1ST"
+    # The badge (wobbled points reach 1.06 r, the pulse adds 5%) must clear the slanted
+    # panel top, or the field clip cuts its spikes flat.
+    m = 2.5
+    edge = m + cut[0] + (cut[1] - cut[0]) * (badge[0] - m) / (JAM_W - 2 * m - 8 * 0.8)
+    assert badge[1] - 56 * 1.06 * 1.05 >= edge + m, f"{name}: badge pokes past the panel top"
     body += [
         back,
         frame(defs, x, y, w, h, rot, art, sw=5, drop=(8, 10)),
