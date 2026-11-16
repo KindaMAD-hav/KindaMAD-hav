@@ -809,7 +809,7 @@ def card(name, kind, cut, at, art, tags, title, blurb, facts, cta, label, rot=-1
         tx += tw + 10
     assert tx - 10 - x <= maxw, f"tags run long: {name}"
     size = BLACK.fit(title, maxw, 56)
-    body.append(letter(defs, title, size, x, 446))
+    body.append(f'<g class="slam">{letter(defs, title, size, x, 446)}</g>')
     lines = MED.wrap(blurb, 19, maxw - 10)
     assert len(lines) <= 3, f"copy runs long: {lines}"
     body += [shout(defs, MED, line, 19, x, 486 + i * 26, off=(1, 2), shadow_opacity=0.45) for i, line in enumerate(lines)]
@@ -829,8 +829,8 @@ def art_survivors(defs, rot):
     swarm = fit_width(site_image("v2/heroes/swarm.webp"), 300)
     return (
         frame(defs, x, y, w, h, rot, plate)
-        + pop(data_uri(minigun, fmt="WEBP", quality=88), 10, 204, 230, 230 * minigun.height / minigun.width)
-        + pop(data_uri(swarm, fmt="WEBP", quality=88), 432, 10, 150, 150 * swarm.height / swarm.width, delay="-1.2s")
+        + pop(data_uri(minigun, fmt="WEBP", quality=88), 2, 192, 288, 288 * minigun.height / minigun.width, cls="fly")
+        + pop(data_uri(swarm, fmt="WEBP", quality=88), 404, 2, 188, 188 * swarm.height / swarm.width, delay="-1.2s")
     )
 
 
@@ -841,8 +841,8 @@ def art_ludo(defs, rot):
     pawn = site_image("ludo/el/pawn-token-red.webp").resize((160, 158), Image.LANCZOS)
     return (
         frame(defs, x, y, w, h, rot, board)
-        + f'<g class="roll"><image href="{data_uri(die, fmt="WEBP", quality=90)}" x="476" y="10" width="96" height="101" filter="url(#popdrop)"/></g>'
-        + pop(data_uri(pawn, fmt="WEBP", quality=90), 18, 258, 80, 79, delay="-.8s")
+        + f'<g class="roll"><image href="{data_uri(die, fmt="WEBP", quality=90)}" x="458" y="4" width="120" height="126" filter="url(#popdrop)"/></g>'
+        + pop(data_uri(pawn, fmt="WEBP", quality=90), 8, 240, 100, 99, delay="-.8s")
     )
 
 
@@ -924,12 +924,12 @@ def jam_card(name, title, cover_rel, focus, place, award, extra, label, rot, cut
     body += [
         back,
         frame(defs, x, y, w, h, rot, art, sw=5, drop=(8, 10)),
-        burst(badge[0], badge[1], 50, GOLD if first else CREAM, place, RED if first else BLUE, 28, rotate=8),
+        burst(badge[0], badge[1], 56, GOLD if first else CREAM, place, RED if first else BLUE, 30, rotate=8, cls="pulse"),
     ]
     maxw = JAM_W - 80
     upper = title.upper()
     size = BLACK.fit(upper, maxw, 40)
-    body.append(letter(defs, upper, size, 40, 330))
+    body.append(f'<g class="slam">{letter(defs, upper, size, 40, 330)}</g>')
     body.append(shout(defs, XBOLD, award, 19, 42, 372, GOLD))
     yy = 404
     if extra:
@@ -1175,8 +1175,8 @@ def footer():
     markup, _ = chips((W - total) / 2, 50, services, 19, 14)
     body += [
         markup,
-        letter(defs, "LET’S BUILD", size, W / 2, y1, anchor="middle"),
-        letter(defs, "SOMETHING", size, W / 2, y2, anchor="middle"),
+        f'<g class="slam">{letter(defs, "LET’S BUILD", size, W / 2, y1, anchor="middle")}</g>',
+        f'<g class="slam" style="animation-delay:.3s">{letter(defs, "SOMETHING", size, W / 2, y2, anchor="middle")}</g>',
     ]
     sub = MED.wrap("Got a game, a prototype, or a half-finished build that needs a push? Tell us about it. "
                    "Based in India, working with clients everywhere.", 22, 700)
