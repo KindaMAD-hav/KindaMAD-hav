@@ -1,6 +1,6 @@
 <!-- The art in assets/ is generated. Edit _build/build.py, then run: python _build/build.py -->
 
-<a href="https://kindamad.com/about"><img src="assets/hero.svg" width="100%" alt="Madhav Gangneja. Founder, KindaMAD Studios. Creator. Game dev. Professionally kinda mad."></a>
+<a href="https://kindamad.com/about"><img src="assets/hero.svg" width="100%" alt="Madhav Gangneja. Founder, KindaMAD Studios. Creator. Game dev. Professionally kinda mad. I'm Madhav, a content creator turned game developer from India and the one-person studio behind KindaMAD Studios. I make loud, hand-made games and build them in public, in front of an audience that ran up over 200 million views in the last year."></a>
 
 <p align="center">
   <a href="https://play.google.com/store/apps/details?id=com.KindaMADstudios.KindaMADballs&utm_source=github_profile&utm_medium=referral&utm_campaign=launch_2026_09"><img src="assets/btn-play.svg" height="44" alt="Play Ball Survivors free on Android"></a>
@@ -15,16 +15,7 @@
   <a href="https://www.linkedin.com/in/madhav-gangneja-9aa265312/"><img src="assets/btn-linkedin.svg" height="40" alt="LinkedIn"></a>
 </p>
 
-<p align="center">
-I'm Madhav, a content creator turned game developer from India and the one-person studio behind <b>KindaMAD Studios</b>.<br>
-I make loud, hand-made games and build them in public, in front of an audience that ran up over 200 million views in the last year.
-</p>
-
-<img src="assets/now.svg" width="100%" alt="Right now. Shipping: Ball Survivors, a survivor roguelike live on Google Play and still getting new weapons every update. Live: Play Ludo, Ludo where every capture is a 10-second duel, out now on Google Play. Tinkering: custom 2D physics, Unity editor tools, and MCP pipelines for Unity, Unreal, Blender and FL Studio.">
-
-<img src="assets/stats.svg" width="100%" alt="200M+ views in the last year. 4 game jam podiums. 40+ ball weapons designed.">
-
-<img src="assets/head-making.svg" width="100%" alt="The lineup. Two games live on Google Play, one jam game you can play in a browser, and one client build.">
+<img src="assets/strip-top.svg" width="100%" alt="Right now. Shipping: Ball Survivors, a survivor roguelike live on Google Play and still getting new weapons every update. Live: Play Ludo, Ludo where every capture is a 10-second duel, out now on Google Play. Tinkering: custom 2D physics, Unity editor tools, and MCP pipelines for Unity, Unreal, Blender and FL Studio. 200M+ views in the last year. 4 game jam podiums. 40+ ball weapons designed. The lineup: two games live on Google Play, one jam game you can play in a browser, and one client build.">
 
 <p align="center">
   <a href="https://kindamad.com/balls/survivors"><img src="assets/card-survivors.svg" width="49%" alt="Ball Survivors, live on Google Play. Pick a ball, outlast the crowd, and every few seconds pick something that makes it worse for them."></a>

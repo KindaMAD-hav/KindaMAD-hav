@@ -281,14 +281,6 @@ def rgb(hex_color):
     return tuple(int(hex_color[i:i + 2], 16) for i in (1, 3, 5))
 
 
-def tint(im, color):
-    """Recolor a silhouette, keeping its alpha."""
-    solid = Image.new("RGBA", im.size, rgb(color) + (255,))
-    solid.putalpha(im.getchannel("A"))
-    return solid
-
-
-@lru_cache(maxsize=None)
 def icon_path(slug):
     with open(os.path.join(ICON_DIR, f"{slug}.svg"), encoding="utf-8") as f:
         return re.search(r'<path d="([^"]+)"', f.read()).group(1)
@@ -586,7 +578,7 @@ def write(name, markup):
 def section_title(defs, title, note, x, y, size, maxw, w, note_fill=CREAM, note_shadow=True, **style):
     """The site's .shead: big lettering on the left, a short note bottom-right."""
     size = BLACK.fit(title, maxw, size)
-    out = [letter(defs, title, size, x, y, **style)]
+    out = [f'<g class="slam">{letter(defs, title, size, x, y, **style)}</g>']
     if note:
         nw = 330
         lines = MED.wrap(note, 20, nw)
@@ -601,35 +593,65 @@ def section_title(defs, title, note, x, y, size, maxw, w, note_fill=CREAM, note_
 # ── Hero ────────────────────────────────────────────────────────────────────
 
 
+HEAD = (302, 198)
+
+
+def bubble(x, y, w, lines, size=25):
+    """A comic speech bubble with its tail pointing down-left, at the portrait."""
+    lh = size * 1.3
+    h = len(lines) * lh + size * 1.1
+    tx, ty = x + 60, y + h
+    tail = f"{num(tx)},{num(ty - 4)} {num(tx + 46)},{num(ty - 4)} {num(tx - 40)},{num(ty + 46)}"
+    out = [
+        f'<rect x="{num(x + 8)}" y="{num(y + 10)}" width="{num(w)}" height="{num(h)}" rx="26" fill="{INK}"/>',
+        f'<polygon points="{tail}" transform="translate(8 10)" fill="{INK}"/>',
+        f'<rect x="{num(x)}" y="{num(y)}" width="{num(w)}" height="{num(h)}" rx="26" fill="{CREAM}" stroke="{INK}" stroke-width="5"/>',
+        f'<polygon points="{tail}" fill="{CREAM}" stroke="{INK}" stroke-width="5" stroke-linejoin="round"/>',
+        f'<rect x="{num(tx + 3)}" y="{num(ty - 10)}" width="40" height="9" fill="{CREAM}"/>',  # opens the tail into the bubble
+    ]
+    for i, line in enumerate(lines):
+        out.append(text(SEMI, line, size, x + size * 1.1, y + size * 0.55 + lh * (i + 0.5) + SEMI.cap * size / 2, INK))
+    return "".join(out)
+
+
 def hero():
-    W, H = 1200, 590
+    W, H = 1200, 660
     defs, body = fresh()
-    back, front = field(defs, W, H, "teal", cut=(0, 0, 20, 0), at=(0.25, 0.5), dot=18)
-    px, py, ps = 288, 292, 340
-    face = data_uri(cover(site_image("madhav.jpg"), 680, 680), quality=86)
+    back, front = bleed(defs, W, H, "teal", at=(0.24, 0.5), dot=18)
+    px, py, ps = 300, 318, 350
+    face = data_uri(cover(site_image("madhav.jpg"), 700, 700), quality=86)
     founder, fw = tag(0, 0, "Founder, KindaMAD Studios", 19, GOLD, INK)
+    gun = fit_width(site_image("v2/heroes/minigun.webp"), 520)
+    saw = site_image("v2/heroes/ripsaw.webp").resize((300, 310), Image.LANCZOS)
     body += [
         back,
-        frame(defs, px - ps / 2, py - ps / 2, ps, ps, -3, face, sw=6, drop=(13, 15), fill="#1d1210"),
-        f'<g transform="translate({num(px + ps / 2 - fw + 26)} {num(py + ps / 2 - 14)}) rotate(-2)">{founder}</g>',
-        bang(46, 34, 140),
+        # The portrait bursts out of a big red POW, the studio mark popping off his head.
+        burst(px, py, 300, RED, cls="pulse", n=18, rotate=-6),
+        f'<g transform="translate({px} {py}) rotate(12)"><polygon points="{star_points(14, 228, 180)}" fill="{GOLD}" '
+        f'stroke="{INK}" stroke-width="6" stroke-linejoin="round"/></g>',
+        frame(defs, px - ps / 2, py - ps / 2, ps, ps, -4, face, sw=7, drop=(14, 16), fill="#1d1210"),
+        f'<g transform="translate({num(px + ps / 2 - fw + 30)} {num(py + ps / 2 - 16)}) rotate(-3)">{founder}</g>',
+        bang(HEAD[0] - 65, HEAD[1] - 120, 130),
+        f'<g class="spin"><image href="{data_uri(saw, fmt="WEBP", quality=88)}" x="1010" y="-48" width="210" height="217" filter="url(#popdrop)"/></g>',
+        f'<g class="fly"><image href="{data_uri(gun, fmt="WEBP", quality=88)}" x="8" y="474" width="290" '
+        f'height="{num(290 * gun.height / gun.width)}" filter="url(#popdrop)"/></g>',
     ]
-    x0 = 552
-    size = BLACK.fit("GANGNEJA", W - x0 - 90, 136)
-    y1 = 96 + BLACK.cap * size
-    y2 = y1 + size * 0.88
+    x0 = 590
+    size = BLACK.fit("GANGNEJA", W - x0 - 40, 150)
+    y1 = 70 + BLACK.cap * size
+    y2 = y1 + size * 0.9
+    t = y2 + 74
+    tl = BLACK.fit("PROFESSIONALLY KINDA MAD.", W - x0 - 34 - 44, 42)
     body += [
-        letter(defs, "MADHAV", size, x0, y1),
-        letter(defs, "GANGNEJA", size, x0 + 30, y2, top=ORANGE, bot=RED),
-    ]
-    t = y2 + 78
-    body += [
-        letter(defs, "CREATOR. GAME DEV.", 40, x0 + 36, t, top=CREAM, bot=CREAM),
-        letter(defs, "PROFESSIONALLY KINDA MAD.", 40, x0 + 36, t + 48, top=GOLD, bot=GOLD),
-        text(MED, "Content creator turned game developer, from India.", 22, x0 + 40, t + 104, INK),
+        f'<g class="slam">{letter(defs, "MADHAV", size, x0, y1)}</g>',
+        f'<g class="slam" style="animation-delay:.3s">{letter(defs, "GANGNEJA", size, x0 + 26, y2, top=ORANGE, bot=RED)}</g>',
+        letter(defs, "CREATOR. GAME DEV.", tl, x0 + 34, t, top=CREAM, bot=CREAM),
+        letter(defs, "PROFESSIONALLY KINDA MAD.", tl, x0 + 34, t + tl * 1.2, top=GOLD, bot=GOLD),
+        bubble(x0 + 40, t + 86, 520, ["I make loud, hand-made games", "and build them in public."]),
         front,
     ]
-    write("hero.svg", svg(W, H, "Madhav Gangneja, founder of KindaMAD Studios. Creator. Game dev. Professionally kinda mad.", body, defs))
+    write("hero.svg", svg(W, H, "Madhav Gangneja, founder of KindaMAD Studios. Creator. Game dev. Professionally kinda mad. "
+                                "I make loud, hand-made games and build them in public.", body, defs))
 
 
 # ── Link buttons ────────────────────────────────────────────────────────────
@@ -662,19 +684,17 @@ def buttons():
 # ── Right now ───────────────────────────────────────────────────────────────
 
 
-def now():
+def now_section(defs):
     """What's on the bench: three cream cards on a red field, art as the markers."""
     W = 1200
     pad, gap, top, card_h = 50, 30, 150, 262
     colw = (W - 8 - pad * 2 - gap * 2) / 3
-    H = top + card_h + 58
-    defs, body = fresh()
-    back, front = field(defs, W, H, "red", cut=(16, 0, 0, 12), at=(0.15, 0.2))
+    H = top + card_h + 74
+    back, front = bleed(defs, W, H, "red", at=(0.15, 0.2))
     icon = data_uri(site_image("v2/game-icon.webp").resize((176, 176), Image.LANCZOS), fmt="WEBP", quality=90)
     die = data_uri(site_image("ludo/el/dice-5.webp").resize((152, 160), Image.LANCZOS), fmt="WEBP", quality=90)
-    hammer = site_image("renders/BONKER.png").resize((176, 176), Image.LANCZOS)
-    hammer_ink = data_uri(tint(hammer, INK), fmt="WEBP", quality=90)
-    hammer_red = data_uri(tint(hammer, RED), fmt="WEBP", quality=90)
+    # Full colour, like the icon and the die. An ink silhouette on a red copy read as a smudge.
+    hammer = data_uri(site_image("renders/BONKER.png").resize((176, 176), Image.LANCZOS), fmt="WEBP", quality=90)
     rows = [
         ("Shipping", RED, CREAM, True, "BALL SURVIVORS",
          "A survivor roguelike, live on Google Play and still getting new weapons every update."),
@@ -683,7 +703,7 @@ def now():
         ("Tinkering", INK, GOLD, False, "THE WORKSHOP",
          "Custom 2D physics, Unity editor tools, and MCP pipelines for Unity, Unreal, Blender and FL Studio."),
     ]
-    body += [back, section_title(defs, "RIGHT NOW", "What's on the bench, and what's already out.", pad, 112, 78, 600, W)]
+    body = [back, section_title(defs, "RIGHT NOW", "What's on the bench, and what's already out.", pad, 112, 78, 600, W)]
     for i, (status, bg, fg, dot, title, copy) in enumerate(rows):
         x = pad + i * (colw + gap)
         y = top
@@ -695,56 +715,78 @@ def now():
         elif i == 1:
             marker = f'<g class="roll"><image href="{die}" x="{num(mx + 4)}" y="{num(my)}" width="76" height="80" filter="url(#popdrop)"/></g>'
         else:
-            marker = (f'<g class="wob"><image href="{hammer_red}" x="{num(mx + 4)}" y="{num(my + 5)}" width="{ms}" height="{ms}"/>'
-                      f'<image href="{hammer_ink}" x="{num(mx)}" y="{num(my)}" width="{ms}" height="{ms}"/></g>')
+            marker = (f'<g class="wob">{burst(mx + ms / 2, my + ms / 2, 46, GOLD, cls=None)}'
+                      f'<image href="{hammer}" x="{num(mx)}" y="{num(my)}" width="{ms}" height="{ms}" filter="url(#popdrop)"/></g>')
         status_tag, _ = tag(x + 122, y + 44, status, 19, bg, fg, dot=dot)
         tw = colw - 48
         lines = MED.wrap(copy, 19, tw)
         assert len(lines) <= 3, lines
         body += [
+            # Only the card sits crooked; its text stays upright so it lands on the pixel grid.
             f'<g transform="rotate({rot} {num(cx)} {num(cy)})">'
             f'<rect x="{num(x + 8)}" y="{num(y + 10)}" width="{num(colw)}" height="{card_h}" fill="{INK}"/>'
-            f'<rect x="{num(x)}" y="{y}" width="{num(colw)}" height="{card_h}" fill="{CREAM}" stroke="{INK}" stroke-width="4"/>',
-            marker,
+            f'<rect x="{num(x)}" y="{y}" width="{num(colw)}" height="{card_h}" fill="{CREAM}" stroke="{INK}" stroke-width="4"/>'
+            f'{marker}</g>',
             status_tag,
             text(BLACK, title, BLACK.fit(title, tw, 36), x + 24, y + 148, INK),
             *[text(MED, line, 19, x + 24, y + 182 + j * 25, INK, opacity=0.86) for j, line in enumerate(lines)],
-            "</g>",
         ]
     body.append(front)
-    label = "Right now. " + " ".join(f"{s}: {t.title()}. {c}" for s, _, _, _, t, c in rows)
-    write("now.svg", svg(W, H, label, body, defs))
+    return H, body
 
 
-# ── Stats band ──────────────────────────────────────────────────────────────
-
-
-def stats():
-    """The site's proof band: three big numbers on blue."""
-    W, H = 1200, 288
-    defs, body = fresh()
-    back, front = field(defs, W, H, "blue", cut=(0, 14, 12, 0), at=(0.5, 0.55))
-    items = [("200M+", "VIEWS IN THE LAST YEAR"), ("4", "GAME JAM PODIUMS"), ("40+", "BALL WEAPONS DESIGNED")]
-    inset = 50
-    col = (W - 8 - inset * 2) / 3
-    body.append(back)
-    for i, (n, cap) in enumerate(items):
-        cx = inset + col * (i + 0.5)
-        body.append(letter(defs, n, 116, cx, 64 + BLACK.cap * 116, anchor="middle"))
-        body.append(shout(defs, XBOLD, cap, 23, cx, 222, anchor="middle"))
+def stats_section(defs):
+    """The site's proof band, louder: big tilted numbers, the 4 on a pulsing burst."""
+    W, H = 1200, 330
+    back, front = bleed(defs, W, H, "blue", at=(0.5, 0.55))
+    items = [("200M+", "VIEWS IN THE LAST YEAR", -4), ("4", "GAME JAM PODIUMS", 3), ("40+", "BALL WEAPONS DESIGNED", -3)]
+    col = (W - 100) / 3
+    body = [back]
+    for i, (n, cap, rot) in enumerate(items):
+        cx = 50 + col * (i + 0.5)
+        if n == "4":
+            body.append(burst(cx, 150, 112, RED, cls="pulse", n=14))
+        body.append(f'<g transform="rotate({rot} {num(cx)} 150)"><g class="slam" style="animation-delay:{.2 + .15 * i:.2f}s">'
+                    f'{letter(defs, n, 138, cx, 72 + BLACK.cap * 138, anchor="middle")}</g></g>')
+        body.append(shout(defs, XBOLD, cap, 25, cx, 278, anchor="middle"))
     body.append(front)
-    write("stats.svg", svg(W, H, "200M+ views in the last year. 4 game jam podiums. 40+ ball weapons designed.", body, defs))
+    return H, body
 
 
-# ── Section heads ───────────────────────────────────────────────────────────
+def head_section(defs, kind, title, note, at, cut=None):
+    W, H = 1200, 214
+    back, front = bleed(defs, W, H, kind, at=at) if cut is None else field(defs, W, H, kind, cut=cut, at=at)
+    return H, [back, section_title(defs, title, note, 50, 150, 104, 700, W), front]
 
 
 def head(name, kind, title, note, label, cut, at):
-    W, H = 1200, 214
     defs, body = fresh()
-    back, front = field(defs, W, H, kind, cut=cut, at=at)
-    body += [back, section_title(defs, title, note, 50, 150, 104, 700, W), front]
-    write(f"head-{name}.svg", svg(W, H, label, body, defs))
+    H, body = head_section(defs, kind, title, note, at, cut)
+    write(f"head-{name}.svg", svg(1200, H, label, body, defs))
+
+
+def stack(sections):
+    """Sections drawn one under the other in ONE image, joined by the site's seams,
+    so no strip of page background shows between them. Returns (h, body)."""
+    W, y, body, seams = 1200, 0, [], []
+    for i, (kind, h, parts) in enumerate(sections):
+        body.append(f'<g transform="translate(0 {num(y)})">{"".join(parts)}</g>' if y else "".join(parts))
+        y += h
+        if i + 1 < len(sections):
+            seams.append(seam(y, W, FIELDS[sections[i + 1][0]][0], flip=i % 2 == 1))
+    return y, body + seams
+
+
+def top_strip():
+    defs, _ = fresh()
+    sections = [("red", *now_section(defs)), ("blue", *stats_section(defs)),
+                ("indigo", *head_section(defs, "indigo", "THE LINEUP", "Two games live on Google Play, one jam game you can play in a browser, and one client build.", (0.85, 0.2)))]
+    h, body = stack(sections)
+    label = ("Right now. Shipping: Ball Survivors, a survivor roguelike live on Google Play and still getting new weapons every update. "
+             "Live: Play Ludo, Ludo where every capture is a 10-second duel, out now on Google Play. "
+             "Tinkering: custom 2D physics, Unity editor tools, and MCP pipelines for Unity, Unreal, Blender and FL Studio. "
+             "200M+ views in the last year. 4 game jam podiums. 40+ ball weapons designed. The lineup.")
+    write("strip-top.svg", svg(1200, num(h), label, body, defs))
 
 
 # ── Project cards ───────────────────────────────────────────────────────────
@@ -1160,10 +1202,7 @@ def main(args):
     print("Building profile art into assets/")
     hero()
     buttons()
-    now()
-    stats()
-    head("making", "indigo", "THE LINEUP", "Two games live on Google Play, one jam game you can play in a browser, and one client build.",
-         "The lineup", (0, 14, 0, 0), (0.85, 0.2))
+    top_strip()
     cards()
     head("jams", "blue", "BEFORE THE STUDIO, THE JAMS", "Four podiums in 2025. Two 1sts, two 2nds, all team efforts.",
          "Before the studio, the jams", (14, 0, 0, 0), (0.15, 0.3))
