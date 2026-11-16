@@ -920,8 +920,11 @@ def pretty(date):
     return f"{d} {MONTHS[m - 1]} {y}"
 
 
-def contributions():
+def contributions(digits=None, paper_only_tilt=True):
     """The About page's 'Building in public': a taped cream clipping of the last year on gold."""
+    # Big numbers: ExtraBold with a little tracking keeps the counters of 6, 8 and 0
+    # open at ~38px on screen; Black closed them up under the red shadow.
+    font, track, off = digits or (XBOLD, 0.03, (3, 4))
     total, days = fetch_contributions(GITHUB_USER)
     active = sum(1 for d in days if d["count"])
     longest = run = 0
@@ -943,9 +946,11 @@ def contributions():
     # GitHub shows this 1200-wide image at about 750px, so a size here comes out
     # at ~0.62 of itself: nothing below 19 (about 12px on screen).
     cx0, cy0, cw, ch = 50, 196, W - 120, 448
+    paper = (
+        f'<rect x="{cx0 + 10}" y="{cy0 + 12}" width="{cw}" height="{ch}" fill="{INK}"/>'
+        f'<rect x="{cx0}" y="{cy0}" width="{cw}" height="{ch}" fill="{CREAM}" stroke="{INK}" stroke-width="4"/>'
+    )
     clip = [
-        f'<rect x="{cx0 + 10}" y="{cy0 + 12}" width="{cw}" height="{ch}" fill="{INK}"/>',
-        f'<rect x="{cx0}" y="{cy0}" width="{cw}" height="{ch}" fill="{CREAM}" stroke="{INK}" stroke-width="4"/>',
         text(XBOLD, "@KINDAMAD-HAV", 22, cx0 + 30, cy0 + 46, INK),
         text(XBOLD, "LAST 12 MONTHS", 20, cx0 + cw - 30, cy0 + 46, INK, anchor="end"),
     ]
@@ -959,7 +964,7 @@ def contributions():
     for i, (n, label, sub) in enumerate(items):
         cx = cx0 + col * (i + 0.5)
         clip += [
-            shout(defs, BLACK, n, 62, cx, cy0 + 122, INK, RED, off=(4, 5), anchor="middle"),
+            shout(defs, font, n, 62, cx, cy0 + 122, INK, RED, off=off, anchor="middle", tracking=track),
             text(BOLD, label, 21, cx, cy0 + 156, INK, anchor="middle", tracking=0.05),
             text(SEMI, sub, 20, cx, cy0 + 184, LABEL, anchor="middle"),
         ]
@@ -1001,7 +1006,13 @@ def contributions():
     tape = (f'<g transform="rotate(-4 {num(cx0 + cw * 0.46 + 64)} {cy0})">'
             f'<rect x="{num(cx0 + cw * 0.46)}" y="{cy0 - 18}" width="128" height="34" fill="{CREAM}" fill-opacity=".82" '
             f'stroke="{INK}" stroke-opacity=".2" stroke-width="2"/></g>')
-    body += [f'<g transform="rotate(-.6 {num(cx0 + cw / 2)} {num(cy0 + ch / 2)})">{"".join(clip)}{tape}</g>', front]
+    # Only the paper sits crooked. Text turned even half a degree never lines up with
+    # the pixel grid, and at 1x it reads soft; upright, every stroke lands crisp.
+    tilt = f'rotate(-.6 {num(cx0 + cw / 2)} {num(cy0 + ch / 2)})'
+    if paper_only_tilt:
+        body += [f'<g transform="{tilt}">{paper}</g>', "".join(clip), f'<g transform="{tilt}">{tape}</g>', front]
+    else:
+        body += [f'<g transform="{tilt}">{paper}{"".join(clip)}{tape}</g>', front]
 
     label = (f"Building in public: {total:,} GitHub contributions in the last year, {active} active days, "
              f"longest streak {longest} days, best day {best['count']} on {pretty(best['date'])}")
