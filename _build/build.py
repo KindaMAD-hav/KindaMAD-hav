@@ -471,19 +471,23 @@ def rays_and_dots(defs, w, h, kind, at, dot):
     cx, cy = w * at[0], h * at[1]
     hh = max(h, 0.45 * w)
     reach = 0.62 * math.hypot(0.9 * w, 1.08 * hh)
+    # Ids come from uid() so several fields can share one image (stacked sections),
+    # and the masks are sized to this field, not to the whole image.
+    fade, rm, dots, dfade, dm = uid("rf"), uid("rm"), uid("d"), uid("df"), uid("dm")
+    box = f'width="{num(w)}" height="{num(h)}"'
     defs += [
-        f'<radialGradient id="rayfade" cx="{num(cx)}" cy="{num(cy)}" r="{num(reach)}" gradientUnits="userSpaceOnUse">'
+        f'<radialGradient id="{fade}" cx="{num(cx)}" cy="{num(cy)}" r="{num(reach)}" gradientUnits="userSpaceOnUse">'
         '<stop offset=".48" stop-color="#fff"/><stop offset="1" stop-color="#000"/></radialGradient>',
-        '<mask id="raym"><rect width="100%" height="100%" fill="url(#rayfade)"/></mask>',
-        f'<pattern id="dots" width="{dot}" height="{dot}" patternUnits="userSpaceOnUse">'
+        f'<mask id="{rm}"><rect {box} fill="url(#{fade})"/></mask>',
+        f'<pattern id="{dots}" width="{dot}" height="{dot}" patternUnits="userSpaceOnUse">'
         f'<circle cx="{num(dot / 2)}" cy="{num(dot / 2)}" r="{num(dot * 0.2)}" fill="{dotc}"/></pattern>',
-        '<linearGradient id="dotfade" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff"/>'
+        f'<linearGradient id="{dfade}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff"/>'
         '<stop offset=".26" stop-color="#000"/><stop offset=".74" stop-color="#000"/><stop offset="1" stop-color="#fff"/></linearGradient>',
-        '<mask id="dotm"><rect width="100%" height="100%" fill="url(#dotfade)"/></mask>',
+        f'<mask id="{dm}"><rect {box} fill="url(#{dfade})"/></mask>',
     ]
     return (
-        f'<path d="{ray_wedges(cx, cy, 2.2 * math.hypot(w, h))}" fill="{ray}" mask="url(#raym)"/>'
-        '<rect width="100%" height="100%" fill="url(#dots)" mask="url(#dotm)"/>'
+        f'<path d="{ray_wedges(cx, cy, 2.2 * math.hypot(w, h))}" fill="{ray}" mask="url(#{rm})"/>'
+        f'<rect {box} fill="url(#{dots})" mask="url(#{dm})"/>'
     )
 
 
@@ -498,13 +502,29 @@ def field(defs, w, h, kind, cut=(0, 14, 0, 14), at=(0.5, 0.4), dot=16, drop=8, s
     pts = [(x0, y0 + tl), (x1, y0 + tr), (x1, y1 - br), (x0, y1 - bl)]
     poly = " ".join(f"{num(x)},{num(y)}" for x, y in pts)
     shadow = " ".join(f"{num(x + drop * 0.8)},{num(y + drop)}" for x, y in pts)
-    defs.append(f'<clipPath id="fld"><polygon points="{poly}"/></clipPath>')
+    fld = uid("fld")
+    defs.append(f'<clipPath id="{fld}"><polygon points="{poly}"/></clipPath>')
     back = (
-        f'<polygon points="{shadow}" fill="{INK}"/><polygon points="{poly}" fill="{base}"/>'
-        f'<g clip-path="url(#fld)">{rays_and_dots(defs, w, h, kind, at, dot)}'
+        (f'<polygon points="{shadow}" fill="{INK}"/>' if drop else "") + f'<polygon points="{poly}" fill="{base}"/>'
+        f'<g clip-path="url(#{fld})">{rays_and_dots(defs, w, h, kind, at, dot)}'
     )
-    front = f'</g><polygon points="{poly}" fill="none" stroke="{INK}" stroke-width="{sw}" stroke-linejoin="round"/>'
+    front = "</g>" + (f'<polygon points="{poly}" fill="none" stroke="{INK}" stroke-width="{sw}" stroke-linejoin="round"/>' if sw else "")
     return back, front
+
+
+def bleed(defs, w, h, kind, at=(0.5, 0.4), dot=16):
+    """A full-bleed colour field: no cut edge, border or drop, so stacked sections meet
+    edge to edge the way the site's do, joined by seam()."""
+    return field(defs, w, h, kind, cut=(0, 0, 0, 0), at=at, dot=dot, drop=0, sw=0)
+
+
+def seam(y, w, color, rise=26, flip=False):
+    """The site's .seam: the next colour cuts in on a slant over the bottom of the
+    section above, with an ink band along the cut. y is the joint."""
+    a, c = (rise, 0) if not flip else (0, rise)
+    y += 2  # reach past the joint so no hairline shows between the two
+    return (f'<polygon points="0,{num(y - 46 + a)} {w},{num(y - 46 + c)} {w},{y} 0,{y}" fill="{color}"/>'
+            f'<polygon points="0,{num(y - 46 + a)} {w},{num(y - 46 + c)} {w},{num(y - 40 + c)} 0,{num(y - 40 + a)}" fill="{INK}"/>')
 
 
 # ── Documents ───────────────────────────────────────────────────────────────
@@ -523,6 +543,14 @@ BASE_CSS = (
     "@keyframes spin{to{transform:rotate(360deg)}}"
     ".blink{animation:blink 1.1s steps(2) infinite}"
     "@keyframes blink{50%{opacity:.25}}"
+    ".pulse,.slam,.fly{transform-box:fill-box;transform-origin:center}"
+    ".pulse{animation:pulse 1.6s ease-in-out infinite}"
+    "@keyframes pulse{0%,100%{transform:none}50%{transform:scale(1.05) rotate(3deg)}}"
+    ".fly{animation:fly 2.4s ease-in-out infinite}"
+    "@keyframes fly{0%,100%{transform:none}50%{transform:translate(14px,-12px) rotate(-6deg)}}"
+    # The site's .slam, once, as the page loads. Frame 0 is still the resting pose.
+    ".slam{animation:slam .5s cubic-bezier(.2,.9,.3,1.25) .15s 1}"
+    "@keyframes slam{0%{transform:none}1%{transform:scale(1.35) rotate(-5deg)}55%{transform:scale(.95)}100%{transform:none}}"
     "@media (prefers-reduced-motion:reduce){*{animation:none!important}}"
 )
 
